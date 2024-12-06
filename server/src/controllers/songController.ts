@@ -1,5 +1,5 @@
 import { Request, Response, RequestHandler } from 'express';
-import { ParamsDictionary } from 'express-serve-static-core';
+import { getAudioDurationInSeconds } from 'get-audio-duration';
 import path from 'path';
 import { db } from '../utils/db';
 import { Song } from '../../../shared/types/common';
@@ -43,6 +43,9 @@ export class SongController {
         return;
       }
 
+      const duration = await getAudioDurationInSeconds(audioFile.path);
+      console.log('Audio duration:', duration);
+
       let thumbnailUrl: string | undefined = undefined;
       if (multerReq.files?.['thumbnail']?.[0]) {
         const thumbnail = multerReq.files['thumbnail'][0];
@@ -55,6 +58,7 @@ export class SongController {
       const song: Partial<Song> = {
         title: req.body.title || path.parse(audioFile.originalname).name,
         artist: req.body.artist || 'Unknown Artist',
+        duration: Math.floor(duration),
         albumId: req.body.album || 'Unknown Album',
         filepath: audioFile.path,
         thumbnailUrl: thumbnailUrl || '/images/placeholder.jpg'

@@ -30,14 +30,14 @@ export class DbClient {
 
   async createSong(song: Partial<Song>): Promise<Song> {
   const sql = `
-    INSERT INTO songs (title, artist, filepath, albumId, thumbnailUrl)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO songs (title, artist, duration, filepath, albumId, thumbnailUrl)
+    VALUES (?, ?, ?, ?, ?, ?)
   `;
 
   return new Promise((resolve, reject) => {
     this.db.run(
       sql,
-      [song.title, song.artist, song.filepath, song.albumId, song.thumbnailUrl || null],
+      [song.title, song.artist, song.duration, song.filepath, song.albumId, song.thumbnailUrl],
       function(err: Error | null) {
         if (err) reject(err);
 

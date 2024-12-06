@@ -2,15 +2,35 @@
   --primary-color: #ff69b4;
   --secondary-color: #4a90e2;
   --background-dark: rgba(0, 0, 0, 0.5);
+  --thumbnail-color-1: var(--primary-color);
+  --thumbnail-color-2: var(--secondary-color);
 }
 
 body {
   margin: 0;
   font-family: 'Segoe UI', sans-serif;
-  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  background: rgb(18, 18, 18);
   color: white;
   height: 100vh;
   overflow: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    var(--thumbnail-color-1) 0%,
+    transparent 40%
+  );
+  opacity: 0.3;
+  transition: background 0.5s ease;
+  pointer-events: none;
+  z-index: 0;
 }
 
 .app-container {
@@ -54,32 +74,6 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
-.player-controls {
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-  background: var(--background-dark);
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-}
-
-/*// buttons with sexy style*/
-.player-controls button {
-  border: none;
-  background: transparent;
-  color: white;
-  font-size: 24px;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.player-controls button:hover {
-  color: var(--primary-color);
-}
-
 .upload-section input[type="file"] {
   display: none;
 }
@@ -121,98 +115,4 @@ body {
 
 .hidden {
   display: none;
-}
-
-svg#play {
-  width: 50px;
-  margin: 10px auto;
-  display: block;
-  cursor: pointer;
-  transform-origin: 50% 50%;
-}
-
-svg#play.animate #triangle {
-  animation: triangle-animation 1s linear infinite;
-}
-
-svg#play.animate #lineOne {
-  animation: line-one-animation 5s linear infinite;
-}
-
-svg#play.animate #lineTwo {
-  animation: line-two-animation 5s linear infinite;
-}
-
-@keyframes triangle-animation {
-  0% {
-    fill: rgba(255, 0, 0, 0);
-  }
-  100% {
-    fill: #ff00a5;
-  }
-}
-
-@keyframes line-one-animation {
-  0% {
-    transform: rotate(0deg);
-  }
-  25% {
-    transform: rotate(90deg);
-  }
-  50% {
-    transform: rotate(260deg);
-  }
-  75% {
-      transform: rotate(90deg);
-  }
-  100% {
-    transform: rotate(0);
-  }
-}
-
-@keyframes line-two-animation {
-  0% {
-    transform: rotate(0deg);
-  }
-    25% {
-        transform: rotate(-90deg);
-    }
-    50% {
-        transform: rotate(-450deg);
-    }
-    75% {
-        transform: rotate(-90deg);
-    }
-  100% {
-    transform: rotate(0);
-  }
-}
-
-svg#play #triangle {
-  fill: rgba(22, 22, 22, 0);
-  transition: 500ms;
-  transform-origin: 50% 50%;
-}
-
-svg#play:hover #triangle {
-  fill: #aa00ff;
-  transform-origin: 50% 50%;
-}
-
-svg #lineOne, svg #lineTwo {
-  transform-origin: 50% 50%;
-  transition: 1s;
-}
-
-svg:hover #lineOne {
-  transform: rotate(260deg);
-  -webkit-transform: rotate(260deg);
-  -moz-transform: rotate(260deg);
-  -o-transform: rotate(260deg);
-  transform-origin: 50% 50%;
-}
-
-svg:hover #lineTwo {
-  transform: rotate(-450deg);
-  transform-origin: 50% 50%;
 }

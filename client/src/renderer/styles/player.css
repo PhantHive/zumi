@@ -1,0 +1,248 @@
+.player-container {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: var(--background-dark);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  z-index: 10;
+}
+
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.progress-wrapper {
+  display: flex;
+  align-items: center;
+  width: 90%;
+  gap: 1rem;
+}
+
+.progress-bar {
+  flex-grow: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-current {
+  height: 100%;
+  background: linear-gradient(90deg, var(--thumbnail-color-1, var(--primary-color)), var(--thumbnail-color-2, var(--secondary-color)));
+  transition: width 0.1s linear;
+}
+
+.time-display {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  background: var(--background-dark);
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.player-content {
+  display: flex;
+  align-items: center;
+  padding: 1rem 5%;
+  gap: 2rem;
+}
+
+.thumbnail {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.thumbnail.active {
+  position: fixed;
+  z-index: 100;
+  bottom: 5vh;
+  width: 25vw;
+  height: auto;
+  max-height: 80vh;
+  max-width: 80vw;
+  border-radius: 16px;
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.5);
+}
+
+/* don't make hover effect on active eleemnt*/
+.thumbnail:not(.active):hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  flex-grow: 1;
+}
+
+.player-controls button {
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.player-controls button:hover {
+  color: var(--primary-color);
+}
+
+.spectrum-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 2rem;
+  overflow: hidden;
+}
+
+.wave {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(120deg, var(--primary-color), var(--secondary-color));
+  opacity: 0.1;
+  animation: wave 8s linear infinite;
+  transform: translateX(0) translateZ(0) scaleY(1);
+}
+
+.wave:nth-child(2) {
+  bottom: 10px;
+  opacity: 0.02;
+  animation: wave 5s linear infinite;
+}
+
+.wave:nth-child(3) {
+  bottom: 20px;
+  opacity: 0.025;
+  animation: wave 7s linear infinite;
+}
+
+@keyframes wave {
+  0% {
+    transform: translateX(0) translateZ(0) scaleY(1.5);
+  }
+  50% {
+    transform: translateX(-25%) translateZ(0) scaleY(0.7);
+  }
+  100% {
+    transform: translateX(-45%) translateZ(0) scaleY(1);
+  }
+}
+
+
+
+/*PLAYER NAIMATION BUTTON PLAY*/
+svg#play {
+  width: 50px;
+  margin: 10px auto;
+  display: block;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+}
+
+svg#play.animate #triangle {
+  animation: triangle-animation 1s linear infinite;
+}
+
+svg#play.animate #lineOne {
+  animation: line-one-animation 5s linear infinite;
+}
+
+svg#play.animate #lineTwo {
+  animation: line-two-animation 5s linear infinite;
+}
+
+@keyframes triangle-animation {
+  0% {
+    fill: rgba(255, 0, 0, 0);
+  }
+  100% {
+    fill: #ff00a5;
+  }
+}
+
+@keyframes line-one-animation {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(90deg);
+  }
+  50% {
+    transform: rotate(260deg);
+  }
+  75% {
+      transform: rotate(90deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+@keyframes line-two-animation {
+  0% {
+    transform: rotate(0deg);
+  }
+    25% {
+        transform: rotate(-90deg);
+    }
+    50% {
+        transform: rotate(-450deg);
+    }
+    75% {
+        transform: rotate(-90deg);
+    }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+svg#play #triangle {
+  fill: rgba(22, 22, 22, 0);
+  transition: 500ms;
+  transform-origin: 50% 50%;
+}
+
+svg#play:hover #triangle {
+  fill: #aa00ff;
+  transform-origin: 50% 50%;
+}
+
+svg #lineOne, svg #lineTwo {
+  transform-origin: 50% 50%;
+  transition: 1s;
+}
+
+svg:hover #lineOne {
+  transform: rotate(260deg);
+  -webkit-transform: rotate(260deg);
+  -moz-transform: rotate(260deg);
+  -o-transform: rotate(260deg);
+  transform-origin: 50% 50%;
+}
+
+svg:hover #lineTwo {
+  transform: rotate(-450deg);
+  transform-origin: 50% 50%;
+}
