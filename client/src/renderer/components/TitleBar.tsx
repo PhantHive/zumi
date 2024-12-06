@@ -9,7 +9,7 @@ const TitleBar: React.FC = () => {
     <div className="titlebar">
       <div className="titlebar-left">
         <img src="http://localhost:3000/images/mascot.png" alt="Waifu Mascot" className="titlebar-mascot" />
-        <span className="titlebar-text">Zilya Player</span>
+        <span className="titlebar-text">ZUMI</span>
       </div>
       <div className="titlebar-buttons">
         <button className="min-btn" onClick={() => win.minimize()}>–</button>

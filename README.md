@@ -1,4 +1,4 @@
-# Zilya Player
+# ZUMI: The first ever E.T.H.I.C.A.L music player 🌸
 ### The music player of Phearion Music: E.T.H.I.C.A.L Lyrics project.
 
 ![img.png](img.png)
@@ -18,3 +18,14 @@
 - Sqlite3 (for storing music data)
 
 AND THAT'S IT! 🌈✨
+
+
+### What's next (dream goal if I HAD MONEY aha):
+- I would definitely add a lyrics detector to check if the lyrics are E.T.H.I.C.A.L or not before adding them to the database.
+- If we add real human-made music, I would add multiple crawlers to check public information about the artist and the song to make sure it's E.T.H.I.C.A.L. (This include video analysis, lyrics analysis, and much more) (THIS REQUIRES A LOT OF MONEY, so it's just a dream goal :D)
+- I would add a feature to detect the mood of the user and play music that fits the mood. (This requires a lot of data and a lot of money, so it's just a dream goal :D)
+
+Note: let's see how far I will go with this project :) I want at least to make a deployed version for my personal use when I am working on my projects.
+
+
+Wanna see my other projects? Check my [website][https://phanthive.com]
