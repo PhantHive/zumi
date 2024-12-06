@@ -246,3 +246,43 @@ svg:hover #lineTwo {
   transform: rotate(-450deg);
   transform-origin: 50% 50%;
 }
+
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: auto;
+}
+
+.volume-button {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  transition: color 0.2s;
+}
+
+.volume-button:hover {
+  color: var(--primary-color);
+}
+
+.volume-slider {
+  width: 100px;
+  height: 4px;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+  box-shadow: -100px 0 0 95px var(--primary-color);
+}

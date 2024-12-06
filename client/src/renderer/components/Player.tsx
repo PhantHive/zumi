@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Song } from '../../../../shared/types/common';
 import '../styles/player.css';
+import VolumeControl from "./VolumeControl";
 
 interface PlayerProps {
   currentSong: Song | null;
@@ -129,6 +130,7 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
             </svg>
           </button>
           <button onClick={onNext}>Next</button>
+          <VolumeControl audioRef={audioRef} />
         </div>
       </div>
 
