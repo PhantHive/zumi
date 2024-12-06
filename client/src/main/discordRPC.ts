@@ -42,12 +42,12 @@ export class DiscordPresence {
       // from thumbnailUrl
       largeImageKey: largeImageKey,
       largeImageText: `Playing from ${song.albumId || 'Unknown'} playlist`,
-      smallImageKey: 'playing_icon',
+      smallImageKey: 'zumi',
       smallImageText: '▶️ Now Playing',
-      // buttons: [
-      //   { label: 'Listen Along', url: 'YOUR_APP_URL' }
-      // ]
-    });
+      buttons: [
+        {label: 'My website', url: 'https://www.phanthive.com'}
+      ]
+    }).then(r => console.log('Presence updated:', r)).catch(console.error);
   }
 
   clearPresence() {
