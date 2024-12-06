@@ -1,0 +1,64 @@
+.titlebar {
+  -webkit-app-region: drag;
+  height: 2rem;
+  background: linear-gradient(90deg, #ff69b4 0%, #ffb6c1 100%);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0;
+  color: #ffffff;
+  font-family: 'Segoe UI', sans-serif;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  padding-left: 16px;
+  gap: 12px;
+}
+
+.titlebar-mascot {
+  height: 32px;
+  width: 32px;
+  object-fit: contain;
+}
+
+.titlebar-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.titlebar-buttons {
+  -webkit-app-region: no-drag;
+  display: flex;
+  height: 100%;
+}
+
+.titlebar-buttons button {
+  border: none;
+  background: transparent;
+  color: white;
+  width: 46px;
+  height: 100%;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+
+.min-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.max-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.close-btn:hover {
+  background-color: #ff4081;
+}

@@ -1,0 +1,17 @@
+music.db
+.idea/
+__pycache__/
+*.pyc
+
+node_modules/
+dist/
+public/
+build/
+coverage/
+uploads/
+.env
+*.env
+
+*.log
+*.log.*
+*.log-*

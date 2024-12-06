@@ -1,0 +1,218 @@
+:root {
+  --primary-color: #ff69b4;
+  --secondary-color: #4a90e2;
+  --background-dark: rgba(0, 0, 0, 0.5);
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-container {
+  display: grid;
+  grid-template-columns: 250px 1fr;
+  height: 100vh;
+}
+
+.sidebar {
+  background: var(--background-dark);
+  padding: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.main-content {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.song-list {
+  list-style: none;
+  padding: 0;
+}
+
+.song-item {
+  background: rgba(255, 255, 255, 0.1);
+  margin: 10px 0;
+  padding: 15px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.song-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.02);
+}
+
+.song-item.active {
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.player-controls {
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  background: var(--background-dark);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+/*// buttons with sexy style*/
+.player-controls button {
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.player-controls button:hover {
+  color: var(--primary-color);
+}
+
+.upload-section input[type="file"] {
+  display: none;
+}
+
+.upload-section label {
+  display: inline-block;
+  padding: 10px 20px;
+  margin-bottom: 10px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+  text-align: center;
+}
+
+.upload-section label:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.upload-section button {
+  display: inline-block;
+  padding: 10px 20px;
+  background: var(--secondary-color);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+  text-align: center;
+}
+
+.upload-section button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+
+.hidden {
+  display: none;
+}
+
+svg#play {
+  width: 50px;
+  margin: 10px auto;
+  display: block;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+}
+
+svg#play.animate #triangle {
+  animation: triangle-animation 1s linear infinite;
+}
+
+svg#play.animate #lineOne {
+  animation: line-one-animation 5s linear infinite;
+}
+
+svg#play.animate #lineTwo {
+  animation: line-two-animation 5s linear infinite;
+}
+
+@keyframes triangle-animation {
+  0% {
+    fill: rgba(255, 0, 0, 0);
+  }
+  100% {
+    fill: #ff00a5;
+  }
+}
+
+@keyframes line-one-animation {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(90deg);
+  }
+  50% {
+    transform: rotate(260deg);
+  }
+  75% {
+      transform: rotate(90deg);
+  }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+@keyframes line-two-animation {
+  0% {
+    transform: rotate(0deg);
+  }
+    25% {
+        transform: rotate(-90deg);
+    }
+    50% {
+        transform: rotate(-450deg);
+    }
+    75% {
+        transform: rotate(-90deg);
+    }
+  100% {
+    transform: rotate(0);
+  }
+}
+
+svg#play #triangle {
+  fill: rgba(22, 22, 22, 0);
+  transition: 500ms;
+  transform-origin: 50% 50%;
+}
+
+svg#play:hover #triangle {
+  fill: #aa00ff;
+  transform-origin: 50% 50%;
+}
+
+svg #lineOne, svg #lineTwo {
+  transform-origin: 50% 50%;
+  transition: 1s;
+}
+
+svg:hover #lineOne {
+  transform: rotate(260deg);
+  -webkit-transform: rotate(260deg);
+  -moz-transform: rotate(260deg);
+  -o-transform: rotate(260deg);
+  transform-origin: 50% 50%;
+}
+
+svg:hover #lineTwo {
+  transform: rotate(-450deg);
+  transform-origin: 50% 50%;
+}
