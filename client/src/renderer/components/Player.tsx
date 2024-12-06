@@ -42,6 +42,13 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
   };
 
   useEffect(() => {
+    if (currentSong) {
+      setIsPlaying(true);
+      audioRef.current?.play();
+    }
+  }, [currentSong]);
+
+  useEffect(() => {
     if (currentSong?.thumbnailUrl) {
       extractColors(currentSong.thumbnailUrl).then((colors: any) => {
         document.documentElement.style.setProperty('--thumbnail-color-1', colors.color1);
