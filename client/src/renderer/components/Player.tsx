@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Song } from '../../../../shared/types/common';
 import '../styles/player.css';
 import VolumeControl from "./VolumeControl";
+import {ipcRenderer} from "electron";
 
 interface PlayerProps {
   currentSong: Song | null;
@@ -40,6 +41,21 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
       };
     });
   };
+
+  useEffect(() => {
+    if (currentSong && isPlaying) {
+      ipcRenderer.send('update-presence', {
+        title: currentSong.title,
+        artist: currentSong.artist,
+        duration: currentSong.duration,
+        startTime: Date.now(),
+        albumId: currentSong.albumId,
+        thumbnailUrl: currentSong.thumbnailUrl
+      });
+    } else {
+      ipcRenderer.send('clear-presence');
+    }
+  }, [currentSong, isPlaying]);
 
   useEffect(() => {
     if (currentSong) {

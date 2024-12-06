@@ -1,6 +1,18 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
 require('@electron/remote/main').initialize();
+import { DiscordPresence } from './discordRPC';
+import { ipcMain } from 'electron';
+
+const discordRPC = new DiscordPresence();
+
+ipcMain.on('update-presence', (_event, songData) => {
+  discordRPC.updatePresence(songData);
+});
+
+ipcMain.on('clear-presence', () => {
+  discordRPC.clearPresence();
+});
 
 function createWindow() {
   const isDev = process.env.NODE_ENV === 'development'; // Check environment

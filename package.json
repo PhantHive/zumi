@@ -43,6 +43,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "cors": "^2.8.5",
+    "discord-rpc": "^4.0.1",
     "express": "^4.21.1",
     "get-audio-duration": "^4.0.1",
     "multer": "^1.4.5-lts.1",
