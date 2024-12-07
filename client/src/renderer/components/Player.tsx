@@ -132,7 +132,7 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
         {currentSong?.thumbnailUrl && (
           <img
               onClick={handleThumbnailClick}
-            src={`${API_URL}${currentSong.thumbnailUrl}`}
+            src={`${API_URL}/api/songs/thumbnails/${currentSong.thumbnailUrl}`}
             alt="Album art"
             className="thumbnail"
           />

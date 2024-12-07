@@ -42,7 +42,11 @@ app.use('/data', express.static('/app/data'));
 router.get('/thumbnails/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join('/app/uploads/thumbnails', filename);
-  res.sendFile(filePath);
+  res.sendFile(filePath, (err) => {
+    if (err) {
+      res.status(404).send('Thumbnail not found');
+    }
+  });
 });
 
 export default router;

@@ -35,51 +35,52 @@ export class SongController {
   };
 
   createSong: RequestHandler = async (req, res) => {
-  try {
-    const multerReq = req as MulterRequest;
-    const audioFile = multerReq.files?.['audio']?.[0];
-    if (!audioFile) {
-      res.status(400).json({ error: 'No audio file provided' });
-      return;
+    try {
+      const multerReq = req as MulterRequest;
+      const audioFile = multerReq.files?.['audio']?.[0];
+      if (!audioFile) {
+        res.status(400).json({ error: 'No audio file provided' });
+        return;
+      }
+
+      const isDev = process.env.NODE_ENV === 'development';
+      const baseMusicPath = isDev ? './public/data' : '/app/data';
+      const baseThumbnailPath = isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails';
+
+      // Ensure directories exist
+      await fs.promises.mkdir(baseMusicPath, { recursive: true });
+      await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
+
+      const duration = await getAudioDurationInSeconds(audioFile.path);
+      console.log('Audio duration:', duration);
+
+      let thumbnailUrl: string | undefined = undefined;
+      if (multerReq.files?.['thumbnail']?.[0]) {
+        const thumbnail = multerReq.files['thumbnail'][0];
+        // Save thumbnail in the appropriate folder
+        const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
+        await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
+        await fs.promises.unlink(thumbnail.path);
+        thumbnailUrl = `${thumbnail.filename}`;
+      }
+
+      const song: Partial<Song> = {
+        title: req.body.title || path.parse(audioFile.originalname).name,
+        artist: req.body.artist || 'Unknown Artist',
+        duration: Math.floor(duration),
+        albumId: req.body.album || 'Unknown Album',
+        filepath: path.join(baseMusicPath, audioFile.filename),
+        thumbnailUrl: thumbnailUrl || 'placeholder.jpg'
+      };
+
+      const newSong = await db.createSong(song);
+      res.status(201).json({ data: newSong });
+    } catch (error) {
+      console.error('Error creating song:', error);
+      res.status(500).json({ error: 'Failed to create song' });
     }
+  };
 
-    const isDev = process.env.NODE_ENV === 'development';
-    const baseMusicPath = isDev ? './public/data' : '/app/data';
-    const baseThumbnailPath = isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails';
-
-    // Ensure directories exist
-    await fs.promises.mkdir(baseMusicPath, { recursive: true });
-    await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
-
-    const duration = await getAudioDurationInSeconds(audioFile.path);
-    console.log('Audio duration:', duration);
-
-    let thumbnailUrl: string | undefined = undefined;
-    if (multerReq.files?.['thumbnail']?.[0]) {
-      const thumbnail = multerReq.files['thumbnail'][0];
-      // Save thumbnail in the appropriate folder
-      const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
-      await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
-      await fs.promises.unlink(thumbnail.path);
-      thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
-    }
-
-    const song: Partial<Song> = {
-      title: req.body.title || path.parse(audioFile.originalname).name,
-      artist: req.body.artist || 'Unknown Artist',
-      duration: Math.floor(duration),
-      albumId: req.body.album || 'Unknown Album',
-      filepath: path.join(baseMusicPath, audioFile.filename),
-      thumbnailUrl: thumbnailUrl || '/images/placeholder.jpg'
-    };
-
-    const newSong = await db.createSong(song);
-    res.status(201).json({ data: newSong });
-  } catch (error) {
-    console.error('Error creating song:', error);
-    res.status(500).json({ error: 'Failed to create song' });
-  }
-};
 
   streamSong: RequestHandler = async (req, res) => {
     try {
