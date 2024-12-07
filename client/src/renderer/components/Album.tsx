@@ -10,8 +10,6 @@ interface AlbumProps {
 }
 
 const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
-  const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
-
   const getImageUrl = (song: Song) => {
   console.log('Song thumbnail:', song.thumbnailUrl); // Debug log
   if (!song.thumbnailUrl) {
@@ -19,10 +17,10 @@ const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
     return `${API_URL}/images/placeholder.jpg`;
   }
   const cleanedThumbnailUrl = song.thumbnailUrl.startsWith('/') ? song.thumbnailUrl.slice(1) : song.thumbnailUrl;
-  const imageUrl = isDev ? `${API_URL}/${cleanedThumbnailUrl}` : `${API_URL}/app/${cleanedThumbnailUrl}`;
-  console.log('Constructed image URL:', imageUrl); // Debug log
-  return imageUrl;
-};
+      const imageUrl = `${API_URL}/${cleanedThumbnailUrl}`;
+      console.log('Constructed image URL:', imageUrl); // Debug log
+      return imageUrl;
+    };
 
   return (
     <div className="album-container">
