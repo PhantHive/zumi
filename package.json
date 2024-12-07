@@ -1,7 +1,7 @@
 {
   "name": "zumi",
   "version": "1.0.0",
-  "description": "",
+  "description": "Waifu Music Player",
   "main": "dist/client/src/main/main.js",
   "scripts": {
     "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
@@ -9,13 +9,55 @@
     "start:electron": "tsc && electron .",
     "build:server": "tsc -p tsconfig.json",
     "build:client": "webpack --config webpack.config.js",
-    "build": "npm run build:server",
+    "build": "npm run build:client && npm run build:server",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:renderer": "cross-env NODE_ENV=development webpack serve --config webpack.config.js",
-    "dev:electron": "cross-env NODE_ENV=development electron ."
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "pack": "npm run build:client && electron-builder --dir",
+    "make:win": "npm run build:client && electron-builder --win",
+    "make:mac": "npm run build:client && electron-builder --mac",
+    "make:linux": "npm run build:client && electron-builder --linux"
   },
-  "keywords": [],
-  "author": "",
+  "build": {
+    "appId": "com.zumi.musicplayer",
+    "productName": "Zumi",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/client/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/images/app-icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Zumi Music"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "public/images/app-icon.icns"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "public/images/app-icon.png"
+    }
+  },
+  "author": "Your Name",
   "license": "ISC",
   "devDependencies": {
     "@babel/core": "^7.26.0",

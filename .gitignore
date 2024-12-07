@@ -15,3 +15,6 @@ uploads/
 *.log
 *.log.*
 *.log-*
+
+release/
+releases/
