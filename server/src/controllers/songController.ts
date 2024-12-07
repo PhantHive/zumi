@@ -34,7 +34,21 @@ export class SongController {
     }
   };
 
-    createSong: RequestHandler = async (req, res) => {
+    import { Request, Response, RequestHandler } from 'express';
+import { getAudioDurationInSeconds } from 'get-audio-duration';
+import path from 'path';
+import { db } from '../utils/db';
+import { Song } from '../../../shared/types/common';
+import * as fs from 'node:fs';
+
+type MulterRequest = Request & {
+  files?: {
+    [fieldname: string]: Express.Multer.File[];
+  };
+};
+
+export class SongController {
+  createSong: RequestHandler = async (req, res) => {
     try {
       const multerReq = req as MulterRequest;
       const audioFile = multerReq.files?.['audio']?.[0];
@@ -57,15 +71,9 @@ export class SongController {
       let thumbnailUrl: string | undefined = undefined;
       if (multerReq.files?.['thumbnail']?.[0]) {
         const thumbnail = multerReq.files['thumbnail'][0];
-        // Save thumbnail in the appropriate folder
-        const tempThumbnailPath = thumbnail.path;
+        // Use the existing path for the thumbnail
         const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
-        console.log('Temporary thumbnail path:', tempThumbnailPath); // Debug log
         console.log('Public thumbnail path:', publicThumbnailPath); // Debug log
-        await fs.promises.copyFile(tempThumbnailPath, publicThumbnailPath);
-        console.log('Thumbnail copied to:', publicThumbnailPath); // Debug log
-        await fs.promises.unlink(tempThumbnailPath);
-        console.log('Temporary thumbnail deleted:', tempThumbnailPath); // Debug log
         thumbnailUrl = `${thumbnail.filename}`;
       }
 
@@ -85,7 +93,6 @@ export class SongController {
       res.status(500).json({ error: 'Failed to create song' });
     }
   };
-
 
   streamSong: RequestHandler = async (req, res) => {
     try {
