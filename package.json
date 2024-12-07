@@ -7,7 +7,7 @@
     "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
     "start:server": "ts-node server/src/server.ts",
     "start:electron": "tsc && electron .",
-    "build:server": "tsc -p server/tsconfig.json",
+    "build:server": "tsc -p server/tsconfig.json && npm run copy-public",
     "build:client": "cross-env NODE_ENV=production webpack --config webpack.config.js",
     "build:electron": "cross-env NODE_ENV=production tsc -p client/tsconfig.json",
     "build": "npm run build:electron && npm run build:client",
@@ -15,7 +15,8 @@
     "dev:renderer": "cross-env NODE_ENV=development webpack serve --config webpack.config.js",
     "dev:electron": "cross-env NODE_ENV=development electron .",
     "pack": "npm run build && electron-builder --dir",
-    "make:win": "cross-env NODE_ENV=production npm run build && electron-builder --win"
+    "make:win": "cross-env NODE_ENV=production npm run build && electron-builder --win",
+    "copy-public": "copyfiles -u 1 public/**/* dist/"
   },
   "build": {
     "appId": "com.zumi.musicplayer",

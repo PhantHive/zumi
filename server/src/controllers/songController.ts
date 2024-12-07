@@ -43,8 +43,8 @@ export class SongController {
         return;
       }
 
-        const isDev = process.env.NODE_ENV === 'development';
-
+    const isDev = process.env.NODE_ENV === 'development';
+    const baseMusicPath = isDev ? './public/data' : '/app/data';
     const baseThumbnailPath = isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails';
 
     const duration = await getAudioDurationInSeconds(audioFile.path);
@@ -57,7 +57,7 @@ export class SongController {
       const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
       await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
       await fs.promises.unlink(thumbnail.path);
-      thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
+      thumbnailUrl = `app/uploads/thumbnails/${thumbnail.filename}`;
     }
 
       const song: Partial<Song> = {
@@ -65,7 +65,7 @@ export class SongController {
         artist: req.body.artist || 'Unknown Artist',
         duration: Math.floor(duration),
         albumId: req.body.album || 'Unknown Album',
-        filepath: audioFile.path,
+        filepath: path.join(baseMusicPath, audioFile.filename),
         thumbnailUrl: thumbnailUrl || '/images/placeholder.jpg'
       };
 
