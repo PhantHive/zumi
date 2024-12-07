@@ -56,7 +56,7 @@ jobs:
                   context: .
                   file: Dockerfile
                   push: true
-                  tags: phanthive/music-server:${{ env.TAG_NAME }}
+                  tags: zaphial/music-server:${{ env.TAG_NAME }}
                   no-cache: true
 
             - name: Deploy to server
@@ -67,7 +67,7 @@ jobs:
                   key: ${{ secrets.PROD_SERVER_SSH }}
                   port: ${{ secrets.PROD_SERVER_PORT }}
                   script: |
-                      docker pull phanthive/music-server:${{ env.TAG_NAME }}
+                      docker pull zaphial/music-server:${{ env.TAG_NAME }}
                       docker stop music-server || true
                       docker rm music-server || true
                       docker run \
@@ -76,4 +76,4 @@ jobs:
                         -p ${{ secrets.API_PORT }}:${{ secrets.API_PORT }} \
                         -v /opt/music-server/uploads:/app/uploads \
                         -v /opt/music-server/data:/app/data \
-                        phanthive/music-server:${{ env.TAG_NAME }}
+                        zaphial/music-server:${{ env.TAG_NAME }}
