@@ -58,13 +58,14 @@ export class SongController {
       if (multerReq.files?.['thumbnail']?.[0]) {
         const thumbnail = multerReq.files['thumbnail'][0];
         // Save thumbnail in the appropriate folder
+        const tempThumbnailPath = thumbnail.path;
         const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
-        console.log('Thumbnail path:', thumbnail.path); // Debug log
+        console.log('Temporary thumbnail path:', tempThumbnailPath); // Debug log
         console.log('Public thumbnail path:', publicThumbnailPath); // Debug log
-        await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
+        await fs.promises.copyFile(tempThumbnailPath, publicThumbnailPath);
         console.log('Thumbnail copied to:', publicThumbnailPath); // Debug log
-        await fs.promises.unlink(thumbnail.path);
-        console.log('Original thumbnail deleted:', thumbnail.path); // Debug log
+        await fs.promises.unlink(tempThumbnailPath);
+        console.log('Temporary thumbnail deleted:', tempThumbnailPath); // Debug log
         thumbnailUrl = `${thumbnail.filename}`;
       }
 
