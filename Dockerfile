@@ -10,9 +10,9 @@ RUN npm install
 COPY dist/ ./dist/
 COPY shared/ ./shared/
 
-# Create necessary directories
-RUN mkdir -p public/uploads/thumbnails
-RUN mkdir -p public/data
+# Create necessary directories with correct permissions
+RUN mkdir -p /app/uploads/thumbnails /app/data && \
+    chmod -R 775 /app/uploads /app/data
 
 EXPOSE ${PORT}
 

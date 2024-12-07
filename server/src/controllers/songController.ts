@@ -43,23 +43,26 @@ export class SongController {
         return;
       }
 
-    const isDev = process.env.NODE_ENV === 'development';
-    const baseMusicPath = isDev ? './public/data' : '/app/data';
-    const baseThumbnailPath = isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails';
+      const isDev = process.env.NODE_ENV === 'development';
+      const baseMusicPath = isDev ? './public/data' : '/app/data';
+      const baseThumbnailPath = isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails';
 
-    const duration = await getAudioDurationInSeconds(audioFile.path);
-    console.log('Audio duration:', duration);
+      // Ensure directories exist
+      await fs.promises.mkdir(baseMusicPath, { recursive: true });
+      await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
 
-    let thumbnailUrl: string | undefined = undefined;
-    if (multerReq.files?.['thumbnail']?.[0]) {
-      const thumbnail = multerReq.files['thumbnail'][0];
-      // Save thumbnail in the appropriate folder
-      const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
-      await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
-      await fs.promises.unlink(thumbnail.path);
-      thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
-    }
+      const duration = await getAudioDurationInSeconds(audioFile.path);
+      console.log('Audio duration:', duration);
 
+      let thumbnailUrl: string | undefined = undefined;
+      if (multerReq.files?.['thumbnail']?.[0]) {
+        const thumbnail = multerReq.files['thumbnail'][0];
+        // Save thumbnail in the appropriate folder
+        const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
+        await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
+        await fs.promises.unlink(thumbnail.path);
+        thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
+      }
 
       const song: Partial<Song> = {
         title: req.body.title || path.parse(audioFile.originalname).name,
