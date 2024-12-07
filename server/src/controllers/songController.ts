@@ -34,7 +34,7 @@ export class SongController {
     }
   };
 
-  createSong: RequestHandler = async (req, res) => {
+    createSong: RequestHandler = async (req, res) => {
     try {
       const multerReq = req as MulterRequest;
       const audioFile = multerReq.files?.['audio']?.[0];
@@ -59,8 +59,12 @@ export class SongController {
         const thumbnail = multerReq.files['thumbnail'][0];
         // Save thumbnail in the appropriate folder
         const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
+        console.log('Thumbnail path:', thumbnail.path); // Debug log
+        console.log('Public thumbnail path:', publicThumbnailPath); // Debug log
         await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
+        console.log('Thumbnail copied to:', publicThumbnailPath); // Debug log
         await fs.promises.unlink(thumbnail.path);
+        console.log('Original thumbnail deleted:', thumbnail.path); // Debug log
         thumbnailUrl = `${thumbnail.filename}`;
       }
 
