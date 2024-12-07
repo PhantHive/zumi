@@ -1,8 +1,8 @@
 name: Music Player Server Deployment
 on:
     push:
-        branches:
-            - main
+        tags:
+            - 'v*'
 jobs:
     setup:
         runs-on: self-hosted

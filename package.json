@@ -33,11 +33,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "public/images/app-icon.ico"
@@ -53,7 +57,10 @@
       "icon": "public/images/app-icon.icns"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "public/images/app-icon.png"
     }
   },
@@ -88,6 +95,7 @@
     "@types/react-dom": "^19.0.0",
     "cors": "^2.8.5",
     "discord-rpc": "^4.0.1",
+    "dotenv": "^16.4.7",
     "express": "^4.21.1",
     "get-audio-duration": "^4.0.1",
     "multer": "^1.4.5-lts.1",
