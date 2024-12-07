@@ -1,8 +1,8 @@
 name: Music Player Server Deployment
 on:
     push:
-        tags:
-            - 'v*'
+        branches:
+            - main
 jobs:
     setup:
         runs-on: self-hosted
@@ -79,8 +79,8 @@ jobs:
                       docker run \
                         -d \
                         --name music-server \
-                        -e PORT=3000 \
-                        -p 3000:3000 \
+                        -e PORT=${{ secrets.PROD_DOCKER_API_PORT }} \
+                        -p ${{ secrets.PROD_DOCKER_API_PORT }}:${{ secrets.PROD_DOCKER_API_PORT }} \
                         -v /opt/music-server/uploads:/app/uploads \
                         -v /opt/music-server/data:/app/data \
                         zaphial/music-server:${{ env.TAG_NAME }}
