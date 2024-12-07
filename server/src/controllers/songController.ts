@@ -43,17 +43,22 @@ export class SongController {
         return;
       }
 
-      const duration = await getAudioDurationInSeconds(audioFile.path);
-      console.log('Audio duration:', duration);
+        const isDev = process.env.NODE_ENV === 'development';
 
-      let thumbnailUrl: string | undefined = undefined;
-      if (multerReq.files?.['thumbnail']?.[0]) {
-        const thumbnail = multerReq.files['thumbnail'][0];
-        // Save thumbnail in public folder
-        const publicThumbnailPath = `public/uploads/thumbnails/${thumbnail.filename}`;
-        await fs.promises.rename(thumbnail.path, publicThumbnailPath);
-        thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
-      }
+    const baseThumbnailPath = isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails';
+
+    const duration = await getAudioDurationInSeconds(audioFile.path);
+    console.log('Audio duration:', duration);
+
+    let thumbnailUrl: string | undefined = undefined;
+    if (multerReq.files?.['thumbnail']?.[0]) {
+      const thumbnail = multerReq.files['thumbnail'][0];
+      // Save thumbnail in the appropriate folder
+      const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
+      await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
+      await fs.promises.unlink(thumbnail.path);
+      thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
+    }
 
       const song: Partial<Song> = {
         title: req.body.title || path.parse(audioFile.originalname).name,
