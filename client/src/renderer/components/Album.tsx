@@ -11,13 +11,13 @@ interface AlbumProps {
 
 const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
   const getImageUrl = (song: Song) => {
-  console.log('Song thumbnail:', song.thumbnailUrl); // Debug log
-  if (!song.thumbnailUrl) {
-    console.log('No thumbnail URL, using placeholder.');
-    return `${API_URL}/images/placeholder.jpg`;
-  }
-  const cleanedThumbnailUrl = song.thumbnailUrl.startsWith('/') ? song.thumbnailUrl.slice(1) : song.thumbnailUrl;
-      const imageUrl = `${API_URL}/${cleanedThumbnailUrl}`;
+      console.log('Song thumbnail:', song.thumbnailUrl); // Debug log
+      if (!song.thumbnailUrl) {
+        console.log('No thumbnail URL, using placeholder.');
+        return `${API_URL}/images/placeholder.jpg`;
+      }
+      const cleanedThumbnailUrl = song.thumbnailUrl.startsWith('/') ? song.thumbnailUrl.slice(1) : song.thumbnailUrl;
+      const imageUrl = `${API_URL}/thumbnails/${cleanedThumbnailUrl}`;
       console.log('Constructed image URL:', imageUrl); // Debug log
       return imageUrl;
     };

@@ -38,4 +38,11 @@ router.post('/', uploadFields, songController.createSong as RequestHandler);
 app.use('/uploads', express.static('/app/uploads'));
 app.use('/data', express.static('/app/data'));
 
+// Add a route to serve thumbnails
+router.get('/thumbnails/:filename', (req, res) => {
+  const filename = req.params.filename;
+  const filePath = path.join('/app/uploads/thumbnails', filename);
+  res.sendFile(filePath);
+});
+
 export default router;
