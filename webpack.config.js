@@ -1,8 +1,9 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const Dotenv = require('dotenv-webpack');
 
 module.exports = {
-  mode: 'development',
+  mode: process.env.NODE_ENV || 'development',
   entry: './client/src/renderer/index.tsx',
   target: 'electron-renderer',
   output: {
@@ -34,7 +35,8 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: './client/src/index.html',
       filename: 'index.html'
-    })
+    }),
+    new Dotenv()
   ],
   devServer: {
     static: {

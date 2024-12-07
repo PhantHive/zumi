@@ -1,6 +1,4 @@
 import DiscordRPC from 'discord-rpc';
-import dotenv from 'dotenv';
-dotenv.config();
 
 const clientId = process.env.DISCORD_ID; // Get this from Discord Developer Portal
 

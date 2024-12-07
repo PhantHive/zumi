@@ -11,8 +11,8 @@ COPY dist/ ./dist/
 COPY shared/ ./shared/
 
 # Create necessary directories
-RUN mkdir -p uploads/thumbnails
-RUN mkdir -p data
+RUN mkdir -p public/uploads/thumbnails
+RUN mkdir -p public/data
 
 EXPOSE ${PORT}
 

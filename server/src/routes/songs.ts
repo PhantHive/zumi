@@ -5,12 +5,18 @@ import { songController } from '../controllers/songController';
 
 const router = Router();
 
+const isDev = process.env.NODE_ENV === 'development';
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dest = file.fieldname === 'thumbnail'
-      ? './public/uploads/thumbnails'
-      : './uploads';
-    cb(null, dest);
+      ? (isDev ? './public/data' : '/app/data')
+      : (isDev ? './public/uploads/thumbnails': '/app/uploads/thumbnails');
+
+    if (dest !== undefined) {
+        cb(null, dest);
+        return;
+    }
   },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}${path.extname(file.originalname)}`);
