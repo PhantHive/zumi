@@ -12,13 +12,10 @@ const isDev = process.env.NODE_ENV === 'development';
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dest = file.fieldname === 'thumbnail'
-      ? (isDev ? './public/data' : '/app/data')
-      : (isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails');
+      ? (isDev ? './public/uploads/thumbnails' : '/app/uploads/thumbnails')
+      : (isDev ? './public/data' : '/app/data');
 
-    if (dest !== undefined) {
-      cb(null, dest);
-      return;
-    }
+    cb(null, dest);
   },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}${path.extname(file.originalname)}`);
@@ -39,5 +36,6 @@ router.post('/', uploadFields, songController.createSong as RequestHandler);
 
 // Serve static files from /app/uploads
 app.use('/uploads', express.static('/app/uploads'));
+app.use('/data', express.static('/app/data'));
 
 export default router;
