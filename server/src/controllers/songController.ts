@@ -57,8 +57,9 @@ export class SongController {
       const publicThumbnailPath = path.join(baseThumbnailPath, thumbnail.filename);
       await fs.promises.copyFile(thumbnail.path, publicThumbnailPath);
       await fs.promises.unlink(thumbnail.path);
-      thumbnailUrl = `app/uploads/thumbnails/${thumbnail.filename}`;
+      thumbnailUrl = `/uploads/thumbnails/${thumbnail.filename}`;
     }
+
 
       const song: Partial<Song> = {
         title: req.body.title || path.parse(audioFile.originalname).name,

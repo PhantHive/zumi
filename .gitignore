@@ -18,3 +18,9 @@ uploads/
 
 release/
 releases/
+
+*.rar
+*.zip
+*.7z
+
+release.rar
