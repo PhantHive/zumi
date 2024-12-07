@@ -34,20 +34,6 @@ export class SongController {
     }
   };
 
-    import { Request, Response, RequestHandler } from 'express';
-import { getAudioDurationInSeconds } from 'get-audio-duration';
-import path from 'path';
-import { db } from '../utils/db';
-import { Song } from '../../../shared/types/common';
-import * as fs from 'node:fs';
-
-type MulterRequest = Request & {
-  files?: {
-    [fieldname: string]: Express.Multer.File[];
-  };
-};
-
-export class SongController {
   createSong: RequestHandler = async (req, res) => {
     try {
       const multerReq = req as MulterRequest;
