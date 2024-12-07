@@ -74,7 +74,6 @@ jobs:
                       # Create directories if they don't exist and set permissions
                       mkdir -p /opt/music-server/uploads/thumbnails
                       mkdir -p /opt/music-server/data
-                      chmod -R 775 /opt/music-server/uploads /opt/music-server/data
                       
                       # Run new container
                       docker run \
