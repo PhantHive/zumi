@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import {API_URL} from "../../config";
 
 interface SidebarProps {
   onSongUpload: () => void;
@@ -27,7 +28,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     }
 
     try {
-      const response = await fetch('http://localhost:3000/api/songs', {
+      const response = await fetch(`${API_URL}/api/songs`, {
         method: 'POST',
         body: formData
       });

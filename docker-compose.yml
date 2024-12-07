@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  music-server:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

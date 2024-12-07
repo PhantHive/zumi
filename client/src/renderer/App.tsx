@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
 import './styles/global.css';
 import TitleBar from "./components/TitleBar";
+import {API_URL} from "../config";
 
 const App: React.FC = () => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
@@ -16,7 +17,7 @@ const App: React.FC = () => {
 
   const fetchSongs = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/songs');
+      const response = await fetch(`${API_URL}/api/songs`);
       const data = await response.json();
       const songs: Song[] = data.data || [];
 

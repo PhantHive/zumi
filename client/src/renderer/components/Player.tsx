@@ -3,6 +3,7 @@ import { Song } from '../../../../shared/types/common';
 import '../styles/player.css';
 import VolumeControl from "./VolumeControl";
 import {ipcRenderer} from "electron";
+import {API_URL} from "../../config";
 
 interface PlayerProps {
   currentSong: Song | null;
@@ -19,7 +20,7 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
   const extractColors = async (url: string) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = `http://localhost:3000${url}`;
+    img.src = `${API_URL}${url}`;
 
     return new Promise((resolve) => {
       img.onload = () => {
@@ -131,7 +132,7 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
         {currentSong?.thumbnailUrl && (
           <img
               onClick={handleThumbnailClick}
-            src={`http://localhost:3000${currentSong.thumbnailUrl}`}
+            src={`${API_URL}${currentSong.thumbnailUrl}`}
             alt="Album art"
             className="thumbnail"
           />
@@ -166,7 +167,7 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
       {currentSong && (
         <audio
           ref={audioRef}
-          src={`http://localhost:3000/api/songs/${currentSong.id}/stream`}
+          src={`${API_URL}/api/songs/${currentSong.id}/stream`}
           onEnded={onNext}
           onTimeUpdate={handleTimeUpdate}
         />

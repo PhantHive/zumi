@@ -7,7 +7,9 @@
     "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
     "start:server": "ts-node server/src/server.ts",
     "start:electron": "tsc && electron .",
-    "build": "tsc && webpack --config webpack.config.js",
+    "build:server": "tsc -p tsconfig.json",
+    "build:client": "webpack --config webpack.config.js",
+    "build": "npm run build:server",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:renderer": "cross-env NODE_ENV=development webpack serve --config webpack.config.js",
     "dev:electron": "cross-env NODE_ENV=development electron ."
