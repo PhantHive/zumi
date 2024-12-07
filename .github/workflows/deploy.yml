@@ -71,10 +71,10 @@ jobs:
                       docker stop music-server || true
                       docker rm music-server || true
                       
-                      # Create directories if they don't exist
-                      mkdir -p /app/uploads/thumbnails
-                      mkdir -p /app/data
-                      chmod -R 775 /app/uploads /app/data
+                      # Create directories if they don't exist and set permissions
+                      mkdir -p /opt/music-server/uploads/thumbnails
+                      mkdir -p /opt/music-server/data
+                      chmod -R 775 /opt/music-server/uploads /opt/music-server/data
                       
                       # Run new container
                       docker run \
