@@ -17,7 +17,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     // Check auth status when component mounts
-    checkStoredAuthStatus();
+    checkStoredAuthStatus()
+        .then(() => console.log('Auth status checked'))
+        .catch((error) => console.error('Auth status check failed:', error));
   }, []);
 
   const checkStoredAuthStatus = async () => {
@@ -27,6 +29,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (response.success) {
       setIsAuthenticated(true);
       setUserInfo(response.data);
+    } else {
+        setIsAuthenticated(false);
+        setUserInfo(null);
     }
   } catch (error) {
     console.error('Auth check failed:', error);

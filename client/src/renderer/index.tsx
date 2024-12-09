@@ -16,7 +16,8 @@ const Root: React.FC = () => {
   console.log('Auth state:', isAuthenticated);
 
     useEffect(() => {
-    const timer = setTimeout(() => setForceLoading(false), 5000);
+      setIsLoading(false);
+    const timer = setTimeout(() => setForceLoading(false), 7000);
     return () => clearTimeout(timer);
   }, []);
 
