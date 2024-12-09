@@ -16,8 +16,9 @@ const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
     console.log('No thumbnail URL, using placeholder.');
     return `${API_URL}/images/placeholder.jpg`;
   }
+  const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
   const cleanedThumbnailUrl = song.thumbnailUrl.startsWith('/') ? song.thumbnailUrl.slice(1) : song.thumbnailUrl;
-  const imageUrl = `${API_URL}/api/songs/thumbnails/${cleanedThumbnailUrl}`;
+  const imageUrl = isDev ? `${API_URL}/uploads/thumbnails/${cleanedThumbnailUrl}` : `${API_URL}/api/songs/thumbnails/${cleanedThumbnailUrl}`;
   console.log('Constructed image URL:', imageUrl); // Debug log
   return imageUrl;
 };

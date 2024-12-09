@@ -2,7 +2,8 @@ import express from 'express';
 import { Router, RequestHandler } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { songController } from '../controllers/songController';
+import { songController } from '../controllers/songController.js';
+import auth from "../middlewares/auth.js";
 
 const router = Router();
 const app = express();
@@ -29,6 +30,7 @@ const uploadFields = upload.fields([
   { name: 'thumbnail', maxCount: 1 }
 ]) as RequestHandler;
 
+router.use(auth);
 router.get('/', songController.getAllSongs as RequestHandler);
 router.get('/:id', songController.getSong as RequestHandler);
 router.get('/:id/stream', songController.streamSong as RequestHandler);
@@ -41,7 +43,8 @@ app.use('/data', express.static('/app/data'));
 // Add a route to serve thumbnails
 router.get('/thumbnails/:filename', (req, res) => {
   const filename = req.params.filename;
-  const filePath = path.join('/app/uploads/thumbnails', filename);
+  const pathThumb = isDev ? '/public/uploads/thumbnails' : '/app/uploads/thumbnails';
+  const filePath = path.join(__dirname, pathThumb, filename);
   res.sendFile(filePath, (err) => {
     if (err) {
       res.status(404).send('Thumbnail not found');

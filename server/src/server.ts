@@ -2,13 +2,16 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import songRoutes from './routes/songs.js';
-import connectDB from './utils/mongoose.js';
+import songRoutes from './routes/songs';
+import connectDB from './utils/mongoose';
 import dotenv from 'dotenv';
-import { auth } from './middlewares/auth.js';
+import auth from './middlewares/auth';
 
 // Load environment variables
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Connect to the database
 connectDB();

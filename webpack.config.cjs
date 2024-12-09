@@ -8,7 +8,8 @@ module.exports = {
   target: 'electron-renderer',
   output: {
     path: path.join(__dirname, 'dist/client/renderer'),
-    filename: 'bundle.js'
+    filename: 'bundle.js',
+    publicPath: './'
   },
   module: {
     rules: [
@@ -29,14 +30,20 @@ module.exports = {
     ]
   },
   resolve: {
-    extensions: ['.ts', '.tsx', '.js']
+    extensions: ['.ts', '.tsx', '.js', '.jsx']
   },
   plugins: [
     new HtmlWebpackPlugin({
-      template: './client/src/index.html',
-      filename: 'index.html'
+      title: 'Zumi Music Player',
+      // Remove template option completely
+      filename: 'index.html',
+      inject: true,
+      template: path.join(__dirname, 'client/src/renderer/index.html')
     }),
-    new Dotenv()
+    new Dotenv({
+      path: './.env',
+      systemvars: true,
+    })
   ],
   devServer: {
     static: {

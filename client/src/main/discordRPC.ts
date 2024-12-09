@@ -1,6 +1,9 @@
 import DiscordRPC from 'discord-rpc';
 
-const clientId = process.env.DISCORD_ID; // Get this from Discord Developer Portal
+import dotenv from 'dotenv';
+dotenv.config();
+
+console.log('DISCORD_ID:', process.env.DISCORD_ID);
 
 export class DiscordPresence {
   private client: DiscordRPC.Client;
@@ -12,6 +15,7 @@ export class DiscordPresence {
 
 
   constructor() {
+    const clientId = process.env.DISCORD_ID; // Get this from Discord Developer Portal
     this.client = new DiscordRPC.Client({ transport: 'ipc' });
 
     if (!clientId) {

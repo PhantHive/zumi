@@ -1,13 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "commonjs",
-    "lib": ["DOM", "ES2020"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Node",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
     "outDir": "../dist",
     "rootDir": "../",
     "jsx": "react-jsx",
@@ -18,11 +17,5 @@
     "src/**/*",
     "../shared/**/*"
   ],
-  "exclude": ["../node_modules"],
-  "ts-node": {
-    "transpileOnly": true,
-    "compilerOptions": {
-      "module": "commonjs"
-    }
-  }
+  "exclude": ["../node_modules"]
 }

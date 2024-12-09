@@ -5,9 +5,10 @@ import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
 import './styles/global.css';
 import TitleBar from "./components/TitleBar";
-import {API_URL} from "../config";
+import { API_URL } from "../config";
 
 const App: React.FC = () => {
+
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
 
