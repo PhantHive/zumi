@@ -1,6 +1,6 @@
 :root {
-  --primary-color: #ff69b4;
-  --secondary-color: #4a90e2;
+  --primary-color: #6e254a;
+  --secondary-color: #1a3e6a;
   --background-dark: rgba(0, 0, 0, 0.5);
   --thumbnail-color-1: var(--primary-color);
   --thumbnail-color-2: var(--secondary-color);

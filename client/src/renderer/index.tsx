@@ -1,19 +1,28 @@
 // client/src/renderer/index.tsx
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import Login from './components/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import './styles/global.css';
+import Loading from "./components/Loading";
 
 const Root: React.FC = () => {
   console.log('Root component rendering');
   const { isAuthenticated } = useAuth();
+   const [isLoading, setIsLoading] = useState(true);
+   const [forceLoading, setForceLoading] = useState(true);
+
   console.log('Auth state:', isAuthenticated);
+
+    useEffect(() => {
+    const timer = setTimeout(() => setForceLoading(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   return (
     <div>
-      {isAuthenticated ? <App /> : <Login />}
+      {(isLoading || forceLoading) ? <Loading /> : (isAuthenticated ? <App /> : <Login />)}
     </div>
   );
 };

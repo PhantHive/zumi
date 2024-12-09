@@ -1,0 +1,93 @@
+.loading-container {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-container {
+ position: relative;
+ width: 400px;
+ height: 400px;
+ margin: 0 auto 1rem auto;
+}
+
+.spectrum-canvas {
+ position: absolute;
+ top: 50%;
+ left: 50%;
+ transform: translate(-50%, -50%);
+ z-index: 1;
+}
+
+.waifu-image {
+ position: absolute;
+ top: 50%;
+ left: 50%;
+    border-radius: 50%;
+ transform: translate(-50%, -50%);
+    box-shadow: 0 0 30px rgba(147, 51, 234, 0.5);
+ width: 280px;
+ height: 280px;
+ margin: 0;
+ z-index: 2;
+    transition: transform 0.3s ease;
+}
+
+
+.waifu-container {
+  text-align: center;
+  animation: float 3s ease-in-out infinite;
+}
+
+.waifu-image:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.loading-dots {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  background: #9333ea;
+  border-radius: 50%;
+}
+
+.dot:nth-child(1) { animation: blink 1s infinite; }
+.dot:nth-child(2) { animation: blink 1s infinite 0.2s; }
+.dot:nth-child(3) { animation: blink 1s infinite 0.4s; }
+
+.loading-text {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin-top: 1rem;
+  text-shadow: 0 0 10px rgba(147, 51, 234, 0.5);
+}
+
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-20px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+.kawaii-text {
+  background: linear-gradient(45deg, #9333ea, #ff6b6b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
