@@ -1,5 +1,8 @@
-import { Schema, model, Types } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 import { BaseDocument, IModelBase } from "../types/mongotypes";
+
+// Database name constant
+const DATABASE_NAME = 'zumi';
 
 export interface IUser extends BaseDocument {
   email: string;
@@ -8,7 +11,7 @@ export interface IUser extends BaseDocument {
   picture?: string;
   playlists: {
     name: string;
-    songs: Types.ObjectId[];
+    songs: mongoose.Types.ObjectId[];
   }[];
   preferences: {
     theme: 'light' | 'dark';
@@ -16,7 +19,6 @@ export interface IUser extends BaseDocument {
   };
 }
 
-// Interface for user creation
 export interface CreateUserDTO {
   email: string;
   name: string;
@@ -24,7 +26,6 @@ export interface CreateUserDTO {
   picture?: string;
 }
 
-// Extended model interface with custom methods
 export interface UserModel extends IModelBase<IUser> {
   findByGoogleId(googleId: string): Promise<IUser | null>;
   createWithGoogle(userData: CreateUserDTO): Promise<IUser>;
@@ -54,6 +55,7 @@ const userSchema = new Schema<IUser>(
   },
   {
     timestamps: true,
+    versionKey: false,
     toJSON: {
       transform: (_, ret) => {
         ret.id = ret._id;
@@ -80,4 +82,8 @@ userSchema.statics.createWithGoogle = async function(userData: CreateUserDTO): P
   });
 };
 
-export const User = model<IUser, UserModel>('User', userSchema);
+const User = mongoose.connection
+  .useDb(DATABASE_NAME)
+  .model<IUser, UserModel>('users', userSchema);
+
+export default User;

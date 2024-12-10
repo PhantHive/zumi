@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import {API_URL} from "../../config";
+import {API_URL} from "../../urlConfig";
 
 interface SidebarProps {
   onSongUpload: () => void;

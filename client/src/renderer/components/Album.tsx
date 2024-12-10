@@ -1,7 +1,7 @@
 import React from 'react';
 import { Album as AlbumType, Song } from '../../../../shared/types/common';
 import '../styles/album.css';
-import {API_URL} from "../../config";
+import {API_URL} from "../../urlConfig";
 
 interface AlbumProps {
   album: AlbumType;

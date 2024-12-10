@@ -3,7 +3,7 @@ import { Song } from '../../../../shared/types/common';
 import '../styles/player.css';
 import VolumeControl from "./VolumeControl";
 import {ipcRenderer} from "electron";
-import {API_URL} from "../../config";
+import {API_URL} from "../../urlConfig";
 
 interface PlayerProps {
   currentSong: Song | null;

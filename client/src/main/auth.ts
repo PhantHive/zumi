@@ -1,7 +1,8 @@
 import { BrowserWindow, session } from 'electron';
-import { OAuth2Client, Credentials as GoogleCredentials } from 'google-auth-library';
+import { OAuth2Client } from 'google-auth-library';
 import { authConfig } from "../config/auth.js";
 import Store from 'electron-store';
+import {API_URL} from "../urlConfig.js";
 
 interface AuthTokens {
   access_token: string;
@@ -11,6 +12,19 @@ interface AuthTokens {
   expiry_date: number;
 }
 
+interface UserData {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string;
+}
+
+interface StoreSchema {
+  tokens: AuthTokens;
+  serverToken: string;
+  user: UserData;
+}
+
 export class AuthHandler {
   private oAuth2Client: OAuth2Client;
   private authWindow: BrowserWindow | null = null;
@@ -18,7 +32,7 @@ export class AuthHandler {
     resolve: (value: string) => void;
     reject: (reason?: any) => void;
   } | null = null;
-  private store: Store;
+  private store: Store<StoreSchema>;
 
   constructor() {
     this.oAuth2Client = new OAuth2Client({
@@ -26,15 +40,15 @@ export class AuthHandler {
       clientSecret: authConfig.clientSecret,
       redirectUri: authConfig.redirectUri,
     });
-    this.store = new Store({
+    this.store = new Store<StoreSchema>({
       name: 'auth',
       encryptionKey: process.env.STORE_ENCRYPTION_KEY,
     });
 
-     this.initializeStore().then(
-        () => console.log('Store initialized'),
-        (error) => console.error('Store initialization error:', error
-     ));
+    this.initializeStore().then(
+      () => console.log('Store initialized'),
+      (error) => console.error('Store initialization error:', error)
+    );
   }
 
   private async refreshToken(tokens: AuthTokens) {
@@ -83,6 +97,64 @@ export class AuthHandler {
       }
     }
   }
+
+  async getUserInfo() {
+ console.dir("Stored tokens:", this.store.get('tokens'));
+ console.dir("OAuth credentials:", this.oAuth2Client.credentials);
+
+ if (!this.oAuth2Client.credentials?.access_token) {
+   throw new Error('Not authenticated');
+ }
+
+ try {
+   const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+     headers: {
+       'Authorization': `Bearer ${this.oAuth2Client.credentials.access_token}`,
+       'Accept': 'application/json'
+     }
+   });
+
+   console.log("Response status:", response.status);
+   const text = await response.text();
+   console.log("Response body:", text);
+
+   if (!response.ok) throw new Error(text);
+   return JSON.parse(text);
+ } catch (error) {
+   console.error("Fetch error:", error);
+   throw error;
+ }
+}
+
+private async validateWithServer(accessToken: string) {
+  try {
+    console.log(`${API_URL}/api/auth/google`);
+    const response = await fetch(`${API_URL}/api/auth/google`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        googleToken: accessToken  // This matches your server's expected format
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Server validation failed: ${errorText}`);
+    }
+
+    const data = await response.json();
+    if (!data.token || !data.user) {
+      throw new Error('Invalid server response format');
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Server validation error:', error);
+    throw error;
+  }
+}
 
   async signIn(): Promise<void> {
     if (this.oAuth2Client.credentials?.access_token) {
@@ -144,6 +216,13 @@ export class AuthHandler {
       this.oAuth2Client.setCredentials(validTokens);
       this.store.set('tokens', validTokens);
 
+      // After Google OAuth success, validate with our server
+      const serverAuth = await this.validateWithServer(validTokens.access_token);
+
+      // Store the server JWT token
+      this.store.set('serverToken', serverAuth.token);
+      this.store.set('user', serverAuth.user);
+
       if (this.authWindow && !this.authWindow.isDestroyed()) {
         this.authWindow.close();
       }
@@ -153,41 +232,33 @@ export class AuthHandler {
     }
   }
 
-  async getUserInfo() {
- console.dir("Stored tokens:", this.store.get('tokens'));
- console.dir("OAuth credentials:", this.oAuth2Client.credentials);
+  // Add this to your AuthHandler class
+  getAuthHeaders(): { Authorization: string } | null {
+    const token = this.getServerToken();
+    if (!token) return null;
+    return { Authorization: `Bearer ${token}` };
+  }
 
- if (!this.oAuth2Client.credentials?.access_token) {
-   throw new Error('Not authenticated');
- }
-
- try {
-   const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-     headers: {
-       'Authorization': `Bearer ${this.oAuth2Client.credentials.access_token}`,
-       'Accept': 'application/json'
-     }
-   });
-
-   console.log("Response status:", response.status);
-   const text = await response.text();
-   console.log("Response body:", text);
-
-   if (!response.ok) throw new Error(text);
-   return JSON.parse(text);
- } catch (error) {
-   console.error("Fetch error:", error);
-   throw error;
- }
-}
-
+  // Update signOut to also clear server tokens
   async signOut(): Promise<void> {
     try {
       this.store.delete('tokens');
+      this.store.delete('serverToken'); // Clear server JWT
+      this.store.delete('user'); // Clear user data
       await this.oAuth2Client.revokeCredentials();
       await session.defaultSession.clearStorageData();
     } catch (error) {
       throw error instanceof Error ? error : new Error('Sign out failed');
     }
+  }
+
+  // Add method to get server token
+  getServerToken(): string | null {
+    return this.store.get('serverToken') as string | null;
+  }
+
+  // Add method to get stored user
+  getUser(): any {
+    return this.store.get('user');
   }
 }

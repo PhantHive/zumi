@@ -1,7 +1,7 @@
-// client/src/renderer/components/Login.tsx
 import React, { useState } from 'react';
 import { ipcRenderer } from 'electron';
 import { useAuth } from '../context/AuthContext';
+import { FcGoogle } from 'react-icons/fc';
 import '../styles/login.css';
 
 const Login: React.FC = () => {
@@ -31,7 +31,8 @@ const Login: React.FC = () => {
     <div className="login-container">
       <h1>Sign In</h1>
       {error && <p className="error">{error}</p>}
-      <button onClick={handleSignIn} disabled={loading}>
+      <button onClick={handleSignIn} disabled={loading} className="google-sign-in-button">
+        <FcGoogle className="google-icon" />
         {loading ? 'Signing in...' : 'Sign In with Google'}
       </button>
     </div>

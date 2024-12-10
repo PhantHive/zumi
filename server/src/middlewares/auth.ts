@@ -1,6 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models/User';
+import User, { IUser } from '../models/User';
+
+// Extend the Request type to include user
+declare namespace Express {
+  export interface Request {
+    user?: import('../models/User').IUser;
+  }
+}
 
 interface JwtPayload {
   userId: string;

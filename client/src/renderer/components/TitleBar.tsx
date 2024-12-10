@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ipcRenderer } from 'electron';
 import '../styles/titlebar.css';
-import { API_URL } from "../../config";
+import { API_URL } from "../../urlConfig";
 
 const TitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
