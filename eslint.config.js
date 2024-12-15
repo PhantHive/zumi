@@ -19,6 +19,7 @@ export default [
             'coverage/',
             'toto.cjs',
             '*.config.cjs',
+            '*.config.js',
         ],
     },
 ];

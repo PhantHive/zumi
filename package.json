@@ -24,7 +24,7 @@
         "lint:fix": "eslint --config eslint.config.js --fix .",
         "prettier": "prettier --write .",
         "prepare": "husky init",
-        "lint:commit": "lint-staged"
+        "lint:commit": "commitlint -e"
     },
     "build": {
         "appId": "com.zumi.musicplayer",
@@ -92,6 +92,8 @@
         "@babel/core": "^7.26.0",
         "@babel/preset-react": "^7.26.3",
         "@babel/preset-typescript": "^7.26.0",
+        "@commitlint/cli": "^19.6.0",
+        "@commitlint/config-conventional": "^19.6.0",
         "@eslint/js": "^9.17.0",
         "@types/cors": "^2.8.17",
         "@types/express": "^5.0.0",
