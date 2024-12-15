@@ -1,3 +1,4 @@
+// client/src/renderer/App.tsx
 import React, { useState, useEffect } from 'react';
 import { Song, Album } from '../../../shared/types/common';
 import Player from './components/Player';
@@ -6,6 +7,7 @@ import AlbumView from './components/Album';
 import './styles/global.css';
 import TitleBar from './components/TitleBar';
 import { apiClient } from './utils/apiClient';
+import ZumiChan from './components/ZumiChan';
 
 interface SongsResponse {
     data: Song[];
@@ -15,10 +17,16 @@ const App: React.FC = () => {
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
     const [albums, setAlbums] = useState<Album[]>([]);
     const [error, setError] = useState<string | null>(null);
+    const [showZumiChan] = useState(true);
+    const [isZumiChanOpen, setIsZumiChanOpen] = useState(false);
 
     useEffect(() => {
         fetchSongs();
     }, []);
+
+    const handleZumiWave = () => {
+        setIsZumiChanOpen(!isZumiChanOpen);
+    };
 
     const fetchSongs = async () => {
         try {
@@ -56,6 +64,13 @@ const App: React.FC = () => {
             <div className="app-container">
                 <Sidebar onSongUpload={fetchSongs} />
                 <div className="main-content">
+                    {showZumiChan && (
+                        <ZumiChan
+                            onContinue={handleZumiWave}
+                            albums={albums}
+                            setCurrentSong={setCurrentSong}
+                        />
+                    )}
                     {error && <div className="error-message">{error}</div>}
                     {albums.map((album) => (
                         <AlbumView

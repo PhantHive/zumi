@@ -8,12 +8,9 @@ import './styles/global.css';
 import Loading from './components/Loading';
 
 const Root: React.FC = () => {
-    console.log('Root component rendering');
     const { isAuthenticated } = useAuth();
     const [isLoading, setIsLoading] = useState(true);
     const [forceLoading, setForceLoading] = useState(true);
-
-    console.log('Auth state:', isAuthenticated);
 
     useEffect(() => {
         const navigationType = (
@@ -44,19 +41,12 @@ const Root: React.FC = () => {
     );
 };
 
-// Debug logs
-console.log('Script starting');
 const container = document.getElementById('root');
-console.log('Container found:', container);
-
 if (!container) {
-    console.error('Root element not found!');
     throw new Error('Root element not found');
 }
 
 const root = createRoot(container);
-console.log('Root created');
-
 root.render(
     <React.StrictMode>
         <AuthProvider>
@@ -64,4 +54,3 @@ root.render(
         </AuthProvider>
     </React.StrictMode>,
 );
-console.log('Render called');

@@ -144,6 +144,7 @@
         "get-audio-duration": "^4.0.1",
         "google-auth-library": "^9.15.0",
         "jsonwebtoken": "^9.0.2",
+        "lucide-react": "^0.468.0",
         "mongoose": "^8.8.4",
         "multer": "^1.4.5-lts.1",
         "path-browserify": "^1.0.1",
@@ -151,6 +152,8 @@
         "react-dom": "^19.0.0",
         "react-icons": "^5.4.0",
         "react-router-dom": "^7.0.2",
+        "sass": "^1.83.0",
+        "sass-loader": "^16.0.4",
         "sqlite3": "^5.1.7"
     }
 }
