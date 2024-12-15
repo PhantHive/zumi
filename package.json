@@ -18,7 +18,7 @@
         "dev:electron": "cross-env NODE_ENV=development electron .",
         "dev:server": "cross-env NODE_ENV=development tsx watch server/src/server.ts",
         "pack": "npm run build:prod && electron-builder --dir",
-        "make:win": "cross-env NODE_ENV=production npm run build && electron-builder --win",
+        "make:win": "cross-env NODE_ENV=production npm run build:prod && electron-builder --win",
         "copy-public": "copyfiles -u 1 public/**/* dist/client/public/",
         "copy-assets": "copyfiles -u 2 client/src/assets/**/* dist/client/src/",
         "lint": "eslint --config eslint.config.js .",
