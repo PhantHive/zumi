@@ -1,41 +1,45 @@
 /* client/src/renderer/styles/login.css */
 .login-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  background-image: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-image: linear-gradient(
+        135deg,
+        var(--primary-color) 0%,
+        var(--secondary-color) 100%
+    );
 }
 
 .google-sign-in-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: white;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    font-size: 16px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
 }
 
 .google-icon {
-  font-size: 20px;
+    font-size: 20px;
 }
 
 h1 {
-  margin-bottom: 20px;
+    margin-bottom: 20px;
 }
 
 .error {
-  color: red;
-  margin-bottom: 10px;
+    color: red;
+    margin-bottom: 10px;
 }
 
 button {
-  padding: 10px 20px;
-  font-size: 16px;
-  cursor: pointer;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
 }

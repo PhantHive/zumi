@@ -1,63 +1,63 @@
 .album-container {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 15px;
-  padding: 20px;
-  margin: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 15px;
+    padding: 20px;
+    margin: 20px;
 }
 
 .album-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 20px;
 }
 
 .album-cover {
-  width: 200px;
-  height: 200px;
-  border-radius: 10px;
-  object-fit: cover;
-  background: rgba(255, 255, 255, 0.1);
+    width: 200px;
+    height: 200px;
+    border-radius: 10px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .album-info h2 {
-  font-size: 24px;
-  margin: 0;
+    font-size: 24px;
+    margin: 0;
 }
 
 .songs-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 20px;
 }
 
 .song-card {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 10px;
-  cursor: pointer;
-  transition: transform 0.2s;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: transform 0.2s;
 }
 
 .song-card:hover {
-  transform: scale(1.05);
-  background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .song-thumbnail {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 5px;
-  margin-bottom: 10px;
-  background: rgba(255, 255, 255, 0.05);
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .song-title {
-  font-weight: bold;
-  margin-bottom: 5px;
+    font-weight: bold;
+    margin-bottom: 5px;
 }
 
 .song-artist {
-  font-size: 0.9em;
-  opacity: 0.8;
+    font-size: 0.9em;
+    opacity: 0.8;
 }

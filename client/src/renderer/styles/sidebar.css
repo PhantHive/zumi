@@ -1,129 +1,131 @@
 .sidebar {
-  background: var(--background-dark);
-  padding: 20px;
-  backdrop-filter: blur(10px);
-  max-width: 20vw;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  box-sizing: border-box;
+    background: var(--background-dark);
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    max-width: 20vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-sizing: border-box;
 }
 
 .upload-section {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
-.upload-section input[type="file"] {
-  display: none;
+.upload-section input[type='file'] {
+    display: none;
 }
 
 .upload-section label,
 .upload-section button {
-  display: inline-block;
-  padding: 10px 20px;
-  margin-bottom: 10px;
-  border-radius: 25px;
-  cursor: pointer;
-  transition: transform 0.3s, box-shadow 0.3s;
-  text-align: center;
-  width: 100%;
-  color: white;
-  box-sizing: border-box;
+    display: inline-block;
+    padding: 10px 20px;
+    margin-bottom: 10px;
+    border-radius: 25px;
+    cursor: pointer;
+    transition:
+        transform 0.3s,
+        box-shadow 0.3s;
+    text-align: center;
+    width: 100%;
+    color: white;
+    box-sizing: border-box;
 }
 
 .upload-section label {
-  background: var(--primary-color);
+    background: var(--primary-color);
 }
 
 .upload-section label:hover,
 .upload-section button:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: scale(1.05);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .upload-section button {
-  background: var(--secondary-color);
-  border: none;
+    background: var(--secondary-color);
+    border: none;
 }
 
 .upload-section button:disabled {
-  background: #666;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }
 
 .upload-section select,
-.upload-section input[type="text"] {
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 25px;
-  color: white;
-  outline: none;
-  box-sizing: border-box;
+.upload-section input[type='text'] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 25px;
+    color: white;
+    outline: none;
+    box-sizing: border-box;
 }
 
 .upload-section select:focus,
-.upload-section input[type="text"]:focus {
-  border-color: var(--primary-color);
+.upload-section input[type='text']:focus {
+    border-color: var(--primary-color);
 }
 
 .input-container {
-  position: relative;
-  width: 100%;
-  margin-bottom: 10px;
-  box-sizing: border-box;
+    position: relative;
+    width: 100%;
+    margin-bottom: 10px;
+    box-sizing: border-box;
 }
 
 .suggestions {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: rgb(30, 30, 30);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: 1000;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  box-sizing: border-box;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: rgb(30, 30, 30);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
 }
 
 .suggestion-item {
-  padding: 8px 16px;
-  cursor: pointer;
-  transition: background-color 0.2s;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
 }
 
 .suggestion-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .genre-select {
-  width: 100%;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 25px;
-  outline: none;
-  cursor: pointer;
-  box-sizing: border-box;
+    width: 100%;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 25px;
+    outline: none;
+    cursor: pointer;
+    box-sizing: border-box;
 }
 
 .genre-select:focus {
-  border-color: var(--primary-color);
+    border-color: var(--primary-color);
 }
 
 .genre-select option {
-  background: rgb(30, 30, 30);
-  color: white;
-  padding: 8px;
+    background: rgb(30, 30, 30);
+    color: white;
+    padding: 8px;
 }

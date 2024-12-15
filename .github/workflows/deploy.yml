@@ -70,11 +70,11 @@ jobs:
                       # Stop and remove existing container if it exists
                       docker stop music-server || true
                       docker rm music-server || true
-                      
+
                       # Create directories if they don't exist and set permissions
                       mkdir -p /opt/music-server/uploads/thumbnails
                       mkdir -p /opt/music-server/data
-                      
+
                       # Run new container
                       docker run \
                       -d \

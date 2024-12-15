@@ -1,21 +1,18 @@
 {
-  "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "Node",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "outDir": "../dist",
-    "rootDir": "../",
-    "jsx": "react-jsx",
-    "baseUrl": "../",
-    "typeRoots": ["../node_modules/@types", "./src/types"]
-  },
-  "include": [
-    "src/**/*",
-    "../shared/**/*"
-  ],
-  "exclude": ["../node_modules"]
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true,
+        "outDir": "../dist",
+        "rootDir": "../",
+        "jsx": "react-jsx",
+        "baseUrl": "../",
+        "typeRoots": ["../node_modules/@types", "./src/types"]
+    },
+    "include": ["src/**/*", "../shared/**/*"],
+    "exclude": ["../node_modules"]
 }

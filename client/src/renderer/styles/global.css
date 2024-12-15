@@ -1,73 +1,73 @@
 :root {
-  --primary-color: #6e254a;
-  --secondary-color: #1a3e6a;
-  --background-dark: rgba(0, 0, 0, 0.5);
-  --thumbnail-color-1: var(--primary-color);
-  --thumbnail-color-2: var(--secondary-color);
+    --primary-color: #6e254a;
+    --secondary-color: #1a3e6a;
+    --background-dark: rgba(0, 0, 0, 0.5);
+    --thumbnail-color-1: var(--primary-color);
+    --thumbnail-color-2: var(--secondary-color);
 }
 
 body {
-  margin: 0;
-  font-family: 'Segoe UI', sans-serif;
-  background: rgb(18, 18, 18);
-  color: white;
-  height: 100vh;
-  overflow: hidden;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background: rgb(18, 18, 18);
+    color: white;
+    height: 100vh;
+    overflow: hidden;
 }
 
 body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    180deg,
-    var(--thumbnail-color-1) 0%,
-    transparent 40%
-  );
-  opacity: 0.3;
-  transition: background 0.5s ease;
-  pointer-events: none;
-  z-index: 0;
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        180deg,
+        var(--thumbnail-color-1) 0%,
+        transparent 40%
+    );
+    opacity: 0.3;
+    transition: background 0.5s ease;
+    pointer-events: none;
+    z-index: 0;
 }
 
 .app-container {
-  display: grid;
-  grid-template-columns: 250px 1fr;
-  height: 100vh;
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    height: 100vh;
 }
 
 .main-content {
-  padding: 20px;
-  overflow-y: auto;
+    padding: 20px;
+    overflow-y: auto;
 }
 
 .song-list {
-  list-style: none;
-  padding: 0;
+    list-style: none;
+    padding: 0;
 }
 
 .song-item {
-  background: rgba(255, 255, 255, 0.1);
-  margin: 10px 0;
-  padding: 15px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.3s;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 10px 0;
+    padding: 15px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
 }
 
 .song-item:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.02);
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.02);
 }
 
 .song-item.active {
-  background: rgba(255, 255, 255, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
 .hidden {
-  display: none;
+    display: none;
 }
