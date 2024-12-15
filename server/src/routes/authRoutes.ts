@@ -2,8 +2,8 @@ import { Router, Response, Request } from 'express';
 import {
     AuthController,
     AuthenticatedRequest,
-} from '../controllers/authController';
-import auth from '../middlewares/auth';
+} from '../controllers/authController.js';
+import auth from '../middlewares/auth.js';
 
 const router = Router();
 const authController = new AuthController();
