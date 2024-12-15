@@ -16,4 +16,11 @@ RUN mkdir -p /app/uploads/thumbnails /app/data && \
 
 EXPOSE ${PORT}
 
+CMD if [ -z "$PORT" ] || [ -z "$MONGODB_URI" ]; then \
+    echo "Error: Required environment variables are not set"; \
+    exit 1; \
+    else \
+    node dist/server/src/server.js; \
+    fi
+
 CMD ["node", "dist/server/src/server.js"]
