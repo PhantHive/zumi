@@ -4,33 +4,28 @@ on:
         tags:
             - 'v*'
 jobs:
-    setup:
+    build-and-deploy:
         runs-on: self-hosted
         steps:
             - name: Checkout code
               uses: actions/checkout@v4
+
             - name: Set up Node.js
               uses: actions/setup-node@v4
               with:
                   node-version: '20'
+
             - name: Install dependencies
               run: npm install
 
-    build:
-        needs: setup
-        runs-on: self-hosted
-        steps:
             - name: Build server
               run: npm run build:server
-            - name: Create uploads directory
+
+            - name: Create directories
               run: |
                   mkdir -p uploads/thumbnails
                   mkdir -p data
 
-    docker-deploy:
-        needs: build
-        runs-on: self-hosted
-        steps:
             - name: Check if tag exists
               id: check_tag
               run: |
