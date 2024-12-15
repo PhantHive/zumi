@@ -6,7 +6,7 @@
     "type": "module",
     "scripts": {
         "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
-        "start:server": "cross-env NODE_ENV=production tsx server/src/server.ts",
+        "start:server": "cross-env NODE_ENV=production tsx server/src/server.js",
         "start:electron": "cross-env NODE_ENV=production electron .",
         "build:server": "tsc -p server/tsconfig.build.json",
         "build:client": "webpack --config webpack.config.cjs",

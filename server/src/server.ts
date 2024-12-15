@@ -2,11 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import songRoutes, { staticPaths } from './routes/songs';
-import connectDB from './utils/mongoose';
+import songRoutes, { staticPaths } from './routes/songs.js';
+import connectDB from './utils/mongoose.js';
 import dotenv from 'dotenv';
-import auth from './middlewares/auth';
-import authRoutes from './routes/authRoutes';
+import auth from './middlewares/auth.js';
+import authRoutes from './routes/authRoutes.js';
 
 // Load environment variables
 dotenv.config();
