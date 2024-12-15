@@ -62,26 +62,31 @@ jobs:
                 key: ${{ secrets.PROD_SERVER_SSH }}
                 port: ${{ secrets.PROD_SERVER_PORT }}
                 script: |
-                  # Stop and remove existing container (ignore errors with || true)
+                  # Stop and remove existing container
                   docker stop music-server || true
                   docker rm music-server || true
-                  
+
                   # Create directories
                   mkdir -p /opt/music-server/uploads/thumbnails
                   mkdir -p /opt/music-server/data
-                  
+
                   # Load and validate API_PORT
                   API_PORT=$(grep API_PORT /home/Phearion/Zumi/.env | cut -d '=' -f2 | tr -d '\r\n ')
-                  
+
                   # Debug: Print the port to verify its value
                   echo "Using API_PORT: $API_PORT"
-                  
-                  # Run docker with explicit port
+
+                  # Run docker with env-file
                   docker run \
                     -d \
                     --name music-server \
-                    -e PORT="${API_PORT}" \
+                    --env-file /home/Phearion/Zumi/.env \
                     -p "${API_PORT}:${API_PORT}" \
                     -v /opt/music-server/uploads:/app/uploads \
                     -v /opt/music-server/data:/app/data \
                     zaphial/music-server:${{ env.TAG_NAME }}
+
+                  # Check if container started successfully
+                  echo "Checking container logs..."
+                  sleep 2
+                  docker logs music-server
