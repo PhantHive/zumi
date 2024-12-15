@@ -8,7 +8,7 @@
         "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
         "start:server": "cross-env NODE_ENV=production tsx server/src/server.ts",
         "start:electron": "cross-env NODE_ENV=production electron .",
-        "build:server": "tsc -p server/tsconfig.json",
+        "build:server": "tsc -p server/tsconfig.build.json",
         "build:client": "webpack --config webpack.config.cjs",
         "build:electron": "tsc -p client/tsconfig.json",
         "build:dev": "cross-env NODE_ENV=development npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
