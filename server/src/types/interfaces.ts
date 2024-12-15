@@ -1,4 +1,4 @@
-import { Song } from '../../../shared/types/common';
+import { Song } from '../../../shared/types/common.js';
 
 export interface SongUpload {
     title: string;

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import User, { IUser, CreateUserDTO } from '../models/User';
+import User, { IUser, CreateUserDTO } from '../models/User.js';
 
 interface GoogleUserInfo {
     id: string;

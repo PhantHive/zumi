@@ -1,8 +1,8 @@
 import { Request, RequestHandler } from 'express';
 import { getAudioDurationInSeconds } from 'get-audio-duration';
 import path from 'path';
-import { db } from '../utils/db';
-import { Song } from '../../../shared/types/common';
+import { db } from '../utils/db.js';
+import { Song } from '../../../shared/types/common.js';
 import * as fs from 'node:fs';
 
 type MulterRequest = Request & {

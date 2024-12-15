@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { BaseDocument, IModelBase } from '../types/mongotypes';
+import { BaseDocument, IModelBase } from '../types/mongotypes.js';
 
 // Database name constant
 const DATABASE_NAME = 'zumi';

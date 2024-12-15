@@ -1,7 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { Database } from 'sqlite3';
-import { DatabaseConfig } from '../types/interfaces';
-import { Song } from '../../../shared/types/common';
+import { DatabaseConfig } from '../types/interfaces.js';
+import { Song } from '../../../shared/types/common.js';
 
 export const GENRES = [
     'Epic',
