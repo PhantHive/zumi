@@ -5,7 +5,6 @@ import Player from './components/Player';
 import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
 import './styles/global.css';
-import TitleBar from './components/TitleBar';
 import { apiClient } from './utils/apiClient';
 import ZumiChan from './components/ZumiChan';
 
@@ -74,7 +73,6 @@ const App: React.FC = () => {
 
     return (
         <>
-            <TitleBar />
             <div className="app-container">
                 <Sidebar onSongUpload={fetchSongs} />
                 <div className="main-content">

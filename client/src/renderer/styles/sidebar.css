@@ -1,12 +1,31 @@
+.sidebar-container {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    width: 0; /* Add this to prevent taking space when closed */
+}
+
 .sidebar {
+    position: fixed;
+    left: -20vw;
+    top: 0;
+    height: 100vh;
+    width: 20vw;
     background: var(--background-dark);
-    padding: 20px;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     backdrop-filter: blur(10px);
-    max-width: 20vw;
+    padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
     box-sizing: border-box;
+    z-index: 1000;
+}
+
+.sidebar.open {
+    transform: translateX(20vw);
 }
 
 .upload-section {

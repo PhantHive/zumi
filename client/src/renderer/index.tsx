@@ -6,6 +6,7 @@ import Login from './components/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import './styles/global.css';
 import Loading from './components/Loading';
+import TitleBar from './components/TitleBar';
 
 const Root: React.FC = () => {
     const { isAuthenticated } = useAuth();
@@ -30,6 +31,7 @@ const Root: React.FC = () => {
 
     return (
         <div>
+            <TitleBar />
             {isLoading || forceLoading ? (
                 <Loading />
             ) : isAuthenticated ? (
