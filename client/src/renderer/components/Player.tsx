@@ -10,6 +10,7 @@ interface PlayerProps {
     currentSong: Song | null;
     onNext: () => void;
     onPrevious: () => void;
+    onRandomSong: () => void; // Add this
 }
 
 interface Color {
@@ -24,7 +25,12 @@ interface Colors {
     color2: string;
 }
 
-const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
+const Player: React.FC<PlayerProps> = ({
+    currentSong,
+    onNext,
+    onPrevious,
+    onRandomSong,
+}) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -111,6 +117,72 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
             };
         });
     };
+
+    // Update this existing useEffect to ensure it runs for all play state changes
+    useEffect(() => {
+        // Notify main process of play state changes
+        ipcRenderer.send('thumbnail-update-state', isPlaying);
+    }, [isPlaying]);
+
+    // Modify handlePlayClick to ensure it updates the state first
+    const handlePlayClick = async () => {
+        if (!audioRef.current) return;
+
+        try {
+            if (isPlaying) {
+                audioRef.current.pause();
+                setIsPlaying(false); // This will trigger the useEffect above
+            } else {
+                const playPromise = audioRef.current.play();
+                if (playPromise !== undefined) {
+                    setIsPlaying(true); // Update state before waiting for the promise
+                    await playPromise;
+                }
+            }
+        } catch (error) {
+            console.error('Playback control error:', error);
+            setIsPlaying(false);
+        }
+    };
+
+    useEffect(() => {
+        // Thumbnail toolbar handlers
+        const handleThumbnailPrevious = () => onPrevious();
+        const handleThumbnailNext = () => onNext();
+        const handleThumbnailPlayPause = () => handlePlayClick();
+        const handleThumbnailRandom = () => onRandomSong(); // Add this handler
+
+        ipcRenderer.on('thumbnail-previous', handleThumbnailPrevious);
+        ipcRenderer.on('thumbnail-next', handleThumbnailNext);
+        ipcRenderer.on('thumbnail-playpause', handleThumbnailPlayPause);
+        ipcRenderer.on('thumbnail-random', handleThumbnailRandom); // Add this listener
+
+        return () => {
+            ipcRenderer.removeListener(
+                'thumbnail-previous',
+                handleThumbnailPrevious,
+            );
+            ipcRenderer.removeListener('thumbnail-next', handleThumbnailNext);
+            ipcRenderer.removeListener(
+                'thumbnail-playpause',
+                handleThumbnailPlayPause,
+            );
+            ipcRenderer.removeListener(
+                'thumbnail-random',
+                handleThumbnailRandom,
+            ); // Add this cleanup
+        };
+    }, [onPrevious, onNext, handlePlayClick, onRandomSong]);
+
+    // In Player.tsx useEffect
+    useEffect(() => {
+        if (currentSong) {
+            ipcRenderer.send('update-thumbnail-info', {
+                title: currentSong.title,
+                artist: currentSong.artist,
+            });
+        }
+    }, [currentSong]);
 
     useEffect(() => {
         let cleanup: (() => void) | undefined;
@@ -239,26 +311,6 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
         return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    const handlePlayClick = async () => {
-        if (!audioRef.current) return;
-
-        try {
-            if (isPlaying) {
-                audioRef.current.pause();
-                setIsPlaying(false);
-            } else {
-                const playPromise = audioRef.current.play();
-                if (playPromise !== undefined) {
-                    await playPromise;
-                    setIsPlaying(true);
-                }
-            }
-        } catch (error) {
-            console.error('Playback control error:', error);
-            setIsPlaying(false);
-        }
     };
 
     const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {

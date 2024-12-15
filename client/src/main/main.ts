@@ -7,6 +7,7 @@ import { DiscordPresence } from './discordRPC.js';
 import { AuthHandler } from './auth.js';
 import { fileURLToPath } from 'url';
 import { API_URL } from '../urlConfig.js';
+import { ThumbnailToolbar } from './thumbnailToolbar.js';
 
 const discordRPC = new DiscordPresence();
 const authHandler = new AuthHandler();
@@ -28,7 +29,12 @@ function createWindow() {
             nodeIntegration: true,
             contextIsolation: false,
         },
+        // If you want to show a custom icon in the taskbar
+        icon: path.join(__dirname, '../assets/icon.png'),
     });
+
+    win.setThumbnailToolTip('Zumi Chan');
+    new ThumbnailToolbar(win);
 
     // Window control handlers
     ipcMain.on('window-minimize', () => win.minimize());

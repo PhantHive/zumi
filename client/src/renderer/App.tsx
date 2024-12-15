@@ -58,6 +58,20 @@ const App: React.FC = () => {
         setCurrentSong(song);
     };
 
+    const handleRandomSong = () => {
+        if (albums.length > 0) {
+            const randomAlbum =
+                albums[Math.floor(Math.random() * albums.length)];
+            if (randomAlbum.songs.length > 0) {
+                const randomSong =
+                    randomAlbum.songs[
+                        Math.floor(Math.random() * randomAlbum.songs.length)
+                    ];
+                setCurrentSong(randomSong);
+            }
+        }
+    };
+
     return (
         <>
             <TitleBar />
@@ -117,6 +131,7 @@ const App: React.FC = () => {
                             setCurrentSong(prevSong);
                         }
                     }}
+                    onRandomSong={handleRandomSong} // Add this prop
                 />
             </div>
         </>
