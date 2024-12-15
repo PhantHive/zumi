@@ -3,7 +3,7 @@ import {
     AuthController,
     AuthenticatedRequest,
 } from '../controllers/authController';
-import auth from '../middlewares/auth.ts';
+import auth from '../middlewares/auth';
 
 const router = Router();
 const authController = new AuthController();
