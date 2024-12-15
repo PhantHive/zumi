@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 connectDB();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.API_PORT || 3000;
 
 // CORS configuration
 const corsOptions = {
