@@ -4,11 +4,13 @@ import '../styles/player.css';
 import VolumeControl from './VolumeControl';
 import { ipcRenderer } from 'electron';
 import { apiClient } from '../utils/apiClient';
+import KawaiiPlayButton from './PlayButton';
 
 interface PlayerProps {
     currentSong: Song | null;
     onNext: () => void;
     onPrevious: () => void;
+    onRandomSong: () => void; // Add this
 }
 
 interface Color {
@@ -23,7 +25,12 @@ interface Colors {
     color2: string;
 }
 
-const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
+const Player: React.FC<PlayerProps> = ({
+    currentSong,
+    onNext,
+    onPrevious,
+    onRandomSong,
+}) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -111,6 +118,72 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
         });
     };
 
+    // Update this existing useEffect to ensure it runs for all play state changes
+    useEffect(() => {
+        // Notify main process of play state changes
+        ipcRenderer.send('thumbnail-update-state', isPlaying);
+    }, [isPlaying]);
+
+    // Modify handlePlayClick to ensure it updates the state first
+    const handlePlayClick = async () => {
+        if (!audioRef.current) return;
+
+        try {
+            if (isPlaying) {
+                audioRef.current.pause();
+                setIsPlaying(false); // This will trigger the useEffect above
+            } else {
+                const playPromise = audioRef.current.play();
+                if (playPromise !== undefined) {
+                    setIsPlaying(true); // Update state before waiting for the promise
+                    await playPromise;
+                }
+            }
+        } catch (error) {
+            console.error('Playback control error:', error);
+            setIsPlaying(false);
+        }
+    };
+
+    useEffect(() => {
+        // Thumbnail toolbar handlers
+        const handleThumbnailPrevious = () => onPrevious();
+        const handleThumbnailNext = () => onNext();
+        const handleThumbnailPlayPause = () => handlePlayClick();
+        const handleThumbnailRandom = () => onRandomSong(); // Add this handler
+
+        ipcRenderer.on('thumbnail-previous', handleThumbnailPrevious);
+        ipcRenderer.on('thumbnail-next', handleThumbnailNext);
+        ipcRenderer.on('thumbnail-playpause', handleThumbnailPlayPause);
+        ipcRenderer.on('thumbnail-random', handleThumbnailRandom); // Add this listener
+
+        return () => {
+            ipcRenderer.removeListener(
+                'thumbnail-previous',
+                handleThumbnailPrevious,
+            );
+            ipcRenderer.removeListener('thumbnail-next', handleThumbnailNext);
+            ipcRenderer.removeListener(
+                'thumbnail-playpause',
+                handleThumbnailPlayPause,
+            );
+            ipcRenderer.removeListener(
+                'thumbnail-random',
+                handleThumbnailRandom,
+            ); // Add this cleanup
+        };
+    }, [onPrevious, onNext, handlePlayClick, onRandomSong]);
+
+    // In Player.tsx useEffect
+    useEffect(() => {
+        if (currentSong) {
+            ipcRenderer.send('update-thumbnail-info', {
+                title: currentSong.title,
+                artist: currentSong.artist,
+            });
+        }
+    }, [currentSong]);
+
     useEffect(() => {
         let cleanup: (() => void) | undefined;
 
@@ -165,7 +238,6 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
     useEffect(() => {
         const playNewSong = async () => {
             if (currentSong && audioRef.current) {
-                setIsPlaying(true);
                 try {
                     // Pause the audio and wait for it to complete
                     await audioRef.current.pause();
@@ -182,29 +254,30 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
                     // Ensure pause() has completed before calling play()
                     await new Promise((resolve) => setTimeout(resolve, 100));
 
-                    const isPlaying =
+                    const isCurrentlyPlaying =
                         audioRef.current.currentTime > 0 &&
                         !audioRef.current.paused &&
                         !audioRef.current.ended &&
                         audioRef.current.readyState >
                             audioRef.current.HAVE_CURRENT_DATA;
-                    if (!isPlaying) {
+
+                    if (!isCurrentlyPlaying) {
                         const playPromise = audioRef.current.play();
                         if (playPromise !== undefined) {
-                            playPromise.catch((error) => {
-                                console.error('Playback failed:', error);
-                                setIsPlaying(false);
-                            });
+                            await playPromise; // Wait for play to complete
+                            setIsPlaying(true); // Update the state after successful play
                         }
                     }
-
-                    document
-                        .querySelector('.toggle-play-pause')
-                        ?.classList.add('play');
-                    document.querySelector('#play')?.classList.add('animate');
                 } catch (error) {
                     console.error('Error starting playback:', error);
                     setIsPlaying(false);
+                }
+            } else {
+                setIsPlaying(false);
+                if (currentSong) {
+                    // We'll explicitly set isPlaying to true before calling playNewSong
+                    setIsPlaying(true); // Set this first
+                    setTimeout(playNewSong, 100);
                 }
             }
         };
@@ -240,34 +313,6 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const handlePlayClick = async () => {
-        if (!audioRef.current) return;
-
-        try {
-            if (isPlaying) {
-                audioRef.current.pause();
-                document
-                    .querySelector('.toggle-play-pause')
-                    ?.classList.remove('play');
-                document.querySelector('#play')?.classList.remove('animate');
-                setIsPlaying(false);
-            } else {
-                const playPromise = audioRef.current.play();
-                if (playPromise !== undefined) {
-                    await playPromise;
-                    document
-                        .querySelector('.toggle-play-pause')
-                        ?.classList.add('play');
-                    document.querySelector('#play')?.classList.add('animate');
-                    setIsPlaying(true);
-                }
-            }
-        } catch (error) {
-            console.error('Playback control error:', error);
-            setIsPlaying(false);
-        }
-    };
-
     const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
         const bar = e.currentTarget;
         const clickPosition =
@@ -299,10 +344,12 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
                 // Ensure the audio element's src is updated before calling play()
                 audioRef.current.src = streamData.url;
 
+                // Set playing state before starting playback
+                setIsPlaying(true);
+
                 const playPromise = audioRef.current.play();
                 if (playPromise !== undefined) {
                     await playPromise;
-                    setIsPlaying(true);
                 }
             } catch (error) {
                 console.error('Playback failed:', error);
@@ -346,43 +393,12 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
                     />
                 )}
                 <div className="player-controls">
-                    <button onClick={onPrevious}>Previous</button>
-                    <button
+                    <KawaiiPlayButton
+                        isPlaying={isPlaying}
                         onClick={handlePlayClick}
-                        className={`toggle-play-pause ${isPlaying ? 'play' : ''}`}
-                    >
-                        <svg
-                            id="play"
-                            className={isPlaying ? 'animate' : ''}
-                            viewBox="0 0 163 163"
-                            version="1.1"
-                            xmlns="http://www.w3.org/2000/svg"
-                        >
-                            <g fill="none">
-                                <g
-                                    transform="translate(2.000000, 2.000000)"
-                                    strokeWidth="4"
-                                >
-                                    <path
-                                        d="M10,80 C10,118.107648 40.8923523,149 79,149 L79,149 C117.107648,149 148,118.107648 148,80 C148,41.8923523 117.107648,11 79,11"
-                                        id="lineOne"
-                                        stroke="#EE80D8"
-                                    />
-                                    <path
-                                        d="M105.9,74.4158594 L67.2,44.2158594 C63.5,41.3158594 58,43.9158594 58,48.7158594 L58,109.015859 C58,113.715859 63.4,116.415859 67.2,113.515859 L105.9,83.3158594 C108.8,81.1158594 108.8,76.6158594 105.9,74.4158594 L105.9,74.4158594 Z"
-                                        id="triangle"
-                                        stroke="#EE80D8"
-                                    />
-                                    <path
-                                        d="M159,79.5 C159,35.5933624 123.406638,0 79.5,0 C35.5933624,0 0,35.5933624 0,79.5 C0,123.406638 35.5933624,159 79.5,159 L79.5,159"
-                                        id="lineTwo"
-                                        stroke="#EE80D8"
-                                    />
-                                </g>
-                            </g>
-                        </svg>
-                    </button>
-                    <button onClick={onNext}>Next</button>
+                        onNext={onNext}
+                        onPrevious={onPrevious}
+                    />
                     <VolumeControl audioRef={audioRef} />
                 </div>
             </div>

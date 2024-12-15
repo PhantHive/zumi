@@ -1,0 +1,111 @@
+.burger-button {
+    position: fixed;
+    left: 10px;
+    top: 50px;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(110, 37, 74, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(8px);
+    z-index: 1001;
+}
+
+.burger-button:hover {
+    transform: scale(1.05);
+    background: var(--primary-color);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        0 0 0 4px rgba(110, 37, 74, 0.2);
+}
+
+.burger-button.open {
+    left: calc(20vw - 64px);
+}
+
+/* Burger Icon */
+.menu-icon {
+    position: relative;
+    width: 20px;
+    height: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 1;
+    pointer-events: auto;
+    flex-shrink: 0;
+}
+
+.menu-icon span {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background-color: white;
+    border-radius: 4px;
+    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transform-origin: center;
+}
+
+/* Animated states for the three lines when open */
+.menu-icon.open span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg) scaleX(0.7);
+    background: #ffb7c5; /* Light pink */
+}
+
+.menu-icon.open span:nth-child(2) {
+    transform: scaleX(0);
+    opacity: 0;
+}
+
+.menu-icon.open span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg) scaleX(0.7);
+    background: #ffb7c5; /* Light pink */
+}
+
+/* Hover effects for the lines */
+.burger-button:hover .menu-icon span {
+    transform: scaleX(0.8);
+}
+
+.burger-button:hover .menu-icon span:nth-child(2) {
+    transform: scaleX(0.6);
+}
+
+/* Hover effects when open */
+.burger-button:hover .menu-icon.open span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg) scaleX(0.9);
+}
+
+.burger-button:hover .menu-icon.open span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg) scaleX(0.9);
+}
+
+/* Add glow effect when open */
+.burger-button.open {
+    box-shadow: 0 0 15px rgba(255, 183, 197, 0.3);
+}
+
+/* Add pulse animation when open */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 15px rgba(255, 183, 197, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(255, 183, 197, 0.5);
+    }
+    100% {
+        box-shadow: 0 0 15px rgba(255, 183, 197, 0.3);
+    }
+}
+
+.burger-button.open {
+    animation: pulse 2s infinite;
+    background: rgba(110, 37, 74, 0.95);
+}
