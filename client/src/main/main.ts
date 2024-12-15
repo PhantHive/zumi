@@ -49,7 +49,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    win.loadURL('http://localhost:8080');
+    win.loadURL('http://localhost:31275');
     win.webContents.openDevTools();
   } else {
     const rendererPath = path.join(__dirname, '../../renderer/index.html');
@@ -82,17 +82,24 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('auth:get-user-info', async () => {
-    console.log('auth:get-user-info handler invoked');
-    try {
-      const userInfo = await authHandler.getUserInfo();
-      console.log('User info:', userInfo);
-      return { success: true, data: userInfo };
-    } catch (error: any) {
-      console.error('Get user info error:', error.message);
-      return { success: false, error: error.message };
-    }
-  });
+  // In your main.ts
+ipcMain.handle('auth:get-user-info', async () => {
+  console.log('auth:get-user-info handler invoked');
+  try {
+    const userInfo = await authHandler.getUserInfo();
+    const serverToken = authHandler.getServerToken();
+    console.log('Server token exists:', !!serverToken);
+
+    return {
+      success: true,
+      data: userInfo,
+      token: serverToken // Include server token
+    };
+  } catch (error: any) {
+    console.error('Get user info error:', error.message);
+    return { success: false, error: error.message };
+  }
+});
 
   ipcMain.handle('auth:sign-out', async () => {
     console.log('auth:sign-out handler invoked');

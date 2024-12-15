@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
+const CopyPlugin = require('copy-webpack-plugin');
 
 module.exports = {
   mode: process.env.NODE_ENV || 'development',
@@ -9,7 +10,7 @@ module.exports = {
   output: {
     path: path.join(__dirname, 'dist/client/renderer'),
     filename: 'bundle.js',
-    publicPath: './'
+    publicPath: '/'
   },
   module: {
     rules: [
@@ -35,7 +36,6 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       title: 'Zumi Music Player',
-      // Remove template option completely
       filename: 'index.html',
       inject: true,
       template: path.join(__dirname, 'client/src/renderer/index.html')
@@ -43,19 +43,28 @@ module.exports = {
     new Dotenv({
       path: './.env',
       systemvars: true,
+    }),
+    new CopyPlugin({
+      patterns: [
+        {
+          from: 'public',
+          to: 'public'
+        }
+      ]
     })
   ],
   devServer: {
-  static: [
-    {
-      directory: path.join(__dirname, 'dist/client/renderer'),
-    },
-    {
-      directory: path.join(__dirname, 'public'),
-    }
-  ],
+    static: [
+      {
+        directory: path.join(__dirname, 'dist/client/renderer'),
+      },
+      {
+        directory: path.join(__dirname, 'public'),
+        publicPath: '/public'
+      }
+    ],
     compress: true,
-    port: 8080,
+    port: 31275,
     hot: true,
   }
 };

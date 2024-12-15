@@ -16,10 +16,18 @@ const Root: React.FC = () => {
   console.log('Auth state:', isAuthenticated);
 
     useEffect(() => {
-      setIsLoading(false);
-    const timer = setTimeout(() => setForceLoading(false), 7000);
-    return () => clearTimeout(timer);
-  }, []);
+        const navigationType =
+    (window.performance.getEntriesByType('navigation')
+        [0] as PerformanceNavigationTiming).type;
+      if (navigationType === 'reload') {
+        setIsLoading(false);
+        setForceLoading(false);
+      } else {
+        setIsLoading(false);
+        const timer = setTimeout(() => setForceLoading(false), 7000);
+        return () => clearTimeout(timer);
+      }
+    }, []);
 
   return (
     <div>

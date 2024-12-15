@@ -21,6 +21,26 @@ export class SongController {
     }
   };
 
+  // get top artists suggestions
+    getArtists: RequestHandler = async (_req, res) => {
+        try {
+        const artists = await db.getUniqueArtists();
+        res.json({ data: artists });
+        } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch artists' });
+        }
+    };
+
+    // get top albums suggestions
+    getAlbums: RequestHandler = async (_req, res) => {
+        try {
+        const albums = await db.getUniqueAlbums();
+        res.json({ data: albums });
+        } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch albums' });
+        }
+    };
+
   getSong: RequestHandler = async (req, res) => {
     try {
       const song = await db.getSongById(parseInt(req.params.id));

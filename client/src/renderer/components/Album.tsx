@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Album as AlbumType, Song } from '../../../../shared/types/common';
 import '../styles/album.css';
-import {API_URL} from "../../urlConfig";
+import { apiClient } from '../utils/apiClient';
+import {getAssetPath} from "../utils/assetPath";
 
 interface AlbumProps {
   album: AlbumType;
@@ -10,29 +11,48 @@ interface AlbumProps {
 }
 
 const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
-  const getImageUrl = (song: Song) => {
-  console.log('Song thumbnail:', song.thumbnailUrl); // Debug log
-  if (!song.thumbnailUrl) {
-    console.log('No thumbnail URL, using placeholder.');
-    return `${API_URL}/images/placeholder.jpg`;
-  }
-  const isDev = !process.env.NODE_ENV || process.env.NODE_ENV === 'development';
-  const cleanedThumbnailUrl = song.thumbnailUrl.startsWith('/') ? song.thumbnailUrl.slice(1) : song.thumbnailUrl;
-  const imageUrl = isDev ? `${API_URL}/uploads/thumbnails/${cleanedThumbnailUrl}` : `${API_URL}/api/songs/thumbnails/${cleanedThumbnailUrl}`;
-  console.log('Constructed image URL:', imageUrl); // Debug log
-  return imageUrl;
-};
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+  const cleanupFunctions: (() => void)[] = [];
+
+  const loadThumbnails = async () => {
+    const urls: Record<string, string> = {};
+    for (const song of album.songs) {
+      if (song.thumbnailUrl) {
+        try {
+          const { url, cleanup } = await apiClient.getStream(`/api/songs/thumbnails/${song.thumbnailUrl}`);
+          urls[song.id] = url;
+          cleanupFunctions.push(cleanup);
+        } catch (error) {
+          console.error(`Failed to load thumbnail for song ${song.id}:`, error);
+          urls[song.id] = getAssetPath('images/placeholder.jpg');
+        }
+      } else {
+        urls[song.id] = getAssetPath('images/placeholder.jpg');
+      }
+    }
+    setThumbnailUrls(urls);
+  };
+
+  loadThumbnails();
+
+  // Cleanup function
+  return () => {
+    cleanupFunctions.forEach(cleanup => cleanup());
+  };
+}, [album.songs]);
 
   return (
     <div className="album-container">
       <div className="album-header">
         <img
-          src={album.songs[0] ? getImageUrl(album.songs[0]) : `${API_URL}/images/placeholder.jpg`}
+          src={album.songs[0] ? thumbnailUrls[album.songs[0].id] : getAssetPath('images/placeholder.jpg')}
           alt={album.name}
           className="album-cover"
           onError={(e) => {
             const img = e.target as HTMLImageElement;
-            img.src = `${API_URL}/images/placeholder.jpg`;
+            img.src = getAssetPath('images/placeholder.jpg');
           }}
         />
         <div className="album-info">
@@ -49,12 +69,12 @@ const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
             onClick={() => onSongSelect(song)}
           >
             <img
-              src={getImageUrl(song)}
+              src={thumbnailUrls[song.id] || getAssetPath('images/placeholder.jpg')}
               alt={song.title}
               className="song-thumbnail"
               onError={(e) => {
                 const img = e.target as HTMLImageElement;
-                img.src = '/placeholder.jpg';
+                img.src = getAssetPath('images/placeholder.jpg');
               }}
             />
             <div className="song-title">{song.title}</div>

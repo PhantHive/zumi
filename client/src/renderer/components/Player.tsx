@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Song } from '../../../../shared/types/common';
 import '../styles/player.css';
 import VolumeControl from "./VolumeControl";
-import {ipcRenderer} from "electron";
-import {API_URL} from "../../urlConfig";
+import { ipcRenderer } from "electron";
+import { apiClient } from '../utils/apiClient';
 
 interface PlayerProps {
   currentSong: Song | null;
@@ -15,33 +15,99 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
+  const [streamUrl, setStreamUrl] = useState<string>('');
+  const [streamHeaders, setStreamHeaders] = useState<Record<string, string>>({});
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const extractColors = async (url: string) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = `${API_URL}${url}`;
+const extractColors = async (url: string) => {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = url;
 
-    return new Promise((resolve) => {
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
+  return new Promise((resolve) => {
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
 
-          const topLeft = ctx.getImageData(0, 0, 1, 1).data;
-          const bottomRight = ctx.getImageData(img.width - 1, img.height - 1, 1, 1).data;
+        const sampleColors = (x: number, y: number) => {
+          const data = ctx.getImageData(x, y, 1, 1).data;
+          return { r: data[0], g: data[1], b: data[2], a: data[3] };
+        };
 
+        const isBright = (color: { r: number, g: number, b: number, a: number }) => {
+          if (color.a === 0) return false; // Skip fully transparent pixels
+          const brightness = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+          return brightness > 100; // Adjust threshold as needed
+        };
+
+        const colors = [
+          sampleColors(0, 0),
+          sampleColors(img.width - 1, 0),
+          sampleColors(0, img.height - 1),
+          sampleColors(img.width - 1, img.height - 1),
+          sampleColors(Math.floor(img.width / 2), Math.floor(img.height / 2))
+        ];
+
+        const brightColors = colors.filter(isBright);
+        const chosenColors = brightColors.length > 0 ? brightColors : colors.filter(color => color.a !== 0);
+
+        const brightenColor = (color: { r: number, g: number, b: number, a: number }) => {
+          const factor = 1.5; // Increase brightness by 50%
+          return `rgba(${Math.min(color.r * factor, 255)}, ${Math.min(color.g * factor, 255)}, ${Math.min(color.b * factor, 255)}, 0.8)`;
+        };
+
+        if (chosenColors.length >= 2) {
           resolve({
-            color1: `rgba(${topLeft[0]}, ${topLeft[1]}, ${topLeft[2]}, 0.8)`,
-            color2: `rgba(${bottomRight[0]}, ${bottomRight[1]}, ${bottomRight[2]}, 0.8)`
+            color1: brightenColor(chosenColors[0]),
+            color2: brightenColor(chosenColors[1])
+          });
+        } else {
+          resolve({
+            color1: 'rgba(255, 255, 255, 0.8)', // Default to white if no valid colors found
+            color2: 'rgba(255, 255, 255, 0.8)'
           });
         }
-      };
-    });
-  };
+      }
+    };
+  });
+};
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+
+    const loadMedia = async () => {
+      if (currentSong) {
+        try {
+          const streamData = await apiClient.getStream(`/api/songs/${currentSong.id}/stream`);
+          setStreamUrl(streamData.url);
+          cleanup = streamData.cleanup;
+
+          if (currentSong.thumbnailUrl) {
+            const thumbnailData = await apiClient.getStream(`/api/songs/thumbnails/${currentSong.thumbnailUrl}`);
+            setThumbnailUrl(thumbnailData.url);
+            const prevCleanup = cleanup;
+            cleanup = () => {
+              prevCleanup?.();
+              thumbnailData.cleanup();
+            };
+          }
+        } catch (error) {
+          console.error('Error loading media:', error);
+        }
+      }
+    };
+
+    loadMedia();
+
+    return () => {
+      cleanup?.();
+    };
+  }, [currentSong]);
 
   useEffect(() => {
     if (currentSong && isPlaying) {
@@ -58,21 +124,62 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
     }
   }, [currentSong, isPlaying]);
 
-  useEffect(() => {
-    if (currentSong) {
+useEffect(() => {
+  const playNewSong = async () => {
+    if (currentSong && audioRef.current) {
       setIsPlaying(true);
-      audioRef.current?.play();
+      try {
+        // Pause the audio and wait for it to complete
+        await audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+
+        const streamData = await apiClient.getStream(`/api/songs/${currentSong.id}/stream`);
+        setStreamUrl(streamData.url);
+
+        // Ensure the audio element's src is updated before calling play()
+        audioRef.current.src = streamData.url;
+
+        // Ensure pause() has completed before calling play()
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const isPlaying = audioRef.current.currentTime > 0 && !audioRef.current.paused && !audioRef.current.ended && audioRef.current.readyState > audioRef.current.HAVE_CURRENT_DATA;
+        if (!isPlaying) {
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+              console.error('Playback failed:', error);
+              setIsPlaying(false);
+            });
+          }
+        }
+
+        document.querySelector('.toggle-play-pause')?.classList.add('play');
+        document.querySelector('#play')?.classList.add('animate');
+      } catch (error) {
+        console.error('Error starting playback:', error);
+        setIsPlaying(false);
+      }
     }
-  }, [currentSong]);
+  };
+
+  const playPromise = playNewSong();
+    return () => {
+        if (playPromise) {
+        playPromise.then(() => {
+            setIsPlaying(false);
+        });
+        }
+    };
+}, [currentSong]);
 
   useEffect(() => {
-    if (currentSong?.thumbnailUrl) {
-      extractColors(currentSong.thumbnailUrl).then((colors: any) => {
+    if (thumbnailUrl) {
+      extractColors(thumbnailUrl).then((colors: any) => {
         document.documentElement.style.setProperty('--thumbnail-color-1', colors.color1);
         document.documentElement.style.setProperty('--thumbnail-color-2', colors.color2);
       });
     }
-  }, [currentSong?.thumbnailUrl]);
+  }, [thumbnailUrl]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -80,18 +187,27 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handlePlayClick = () => {
-    if (audioRef.current) {
+  const handlePlayClick = async () => {
+    if (!audioRef.current) return;
+
+    try {
       if (isPlaying) {
         audioRef.current.pause();
         document.querySelector('.toggle-play-pause')?.classList.remove('play');
         document.querySelector('#play')?.classList.remove('animate');
+        setIsPlaying(false);
       } else {
-        audioRef.current.play();
-        document.querySelector('.toggle-play-pause')?.classList.add('play');
-        document.querySelector('#play')?.classList.add('animate');
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          document.querySelector('.toggle-play-pause')?.classList.add('play');
+          document.querySelector('#play')?.classList.add('animate');
+          setIsPlaying(true);
+        }
       }
-      setIsPlaying(!isPlaying);
+    } catch (error) {
+      console.error('Playback control error:', error);
+      setIsPlaying(false);
     }
   };
 
@@ -111,9 +227,36 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
     }
   };
 
-  const handleThumbnailClick = () => {
-  document.querySelector('.thumbnail')?.classList.toggle('active');
+  const handleCoverClick = async () => {
+  if (audioRef.current) {
+    try {
+      const streamData = await apiClient.getStream(`/api/songs/${currentSong?.id}/stream`);
+      setStreamUrl(streamData.url);
+
+      // Ensure the audio element's src is updated before calling play()
+      audioRef.current.src = streamData.url;
+
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        await playPromise;
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Playback failed:', error);
+      setIsPlaying(false);
+    }
+  }
 };
+
+  useEffect(() => {
+    const thumbnailElement = document.querySelector('.album-cover');
+    thumbnailElement?.addEventListener('click', handleCoverClick);
+
+    return () => {
+      thumbnailElement?.removeEventListener('click', handleCoverClick);
+    };
+  }, [thumbnailUrl]);
+
 
   return (
     <div className="player-container">
@@ -129,10 +272,9 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
       </div>
 
       <div className="player-content">
-        {currentSong?.thumbnailUrl && (
+        {currentSong?.thumbnailUrl && thumbnailUrl && (
           <img
-              onClick={handleThumbnailClick}
-            src={`${API_URL}/api/songs/thumbnails/${currentSong.thumbnailUrl}`}
+            src={thumbnailUrl}
             alt="Album art"
             className="thumbnail"
           />
@@ -164,10 +306,10 @@ const Player: React.FC<PlayerProps> = ({ currentSong, onNext, onPrevious }) => {
         <div className="wave"></div>
       </div>
 
-      {currentSong && (
+      {currentSong && streamUrl && (
         <audio
           ref={audioRef}
-          src={`${API_URL}/api/songs/${currentSong.id}/stream`}
+          src={streamUrl}
           onEnded={onNext}
           onTimeUpdate={handleTimeUpdate}
         />

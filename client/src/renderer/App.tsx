@@ -5,12 +5,16 @@ import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
 import './styles/global.css';
 import TitleBar from "./components/TitleBar";
-import { API_URL } from "../urlConfig";
+import { apiClient } from './utils/apiClient';
+
+interface SongsResponse {
+  data: Song[];
+}
 
 const App: React.FC = () => {
-
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSongs();
@@ -18,9 +22,8 @@ const App: React.FC = () => {
 
   const fetchSongs = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/songs`);
-      const data = await response.json();
-      const songs: Song[] = data.data || [];
+      const response = await apiClient.get<SongsResponse>('/api/songs');
+      const songs = response.data || [];
 
       // Group songs by albumId
       const albumMap: { [key: string]: Album } = {};
@@ -36,8 +39,10 @@ const App: React.FC = () => {
       });
 
       setAlbums(Object.values(albumMap));
+      setError(null);
     } catch (error) {
       console.error('Failed to fetch songs:', error);
+      setError('Failed to load songs. Please try again.');
     }
   };
 
@@ -51,6 +56,11 @@ const App: React.FC = () => {
       <div className="app-container">
         <Sidebar onSongUpload={fetchSongs} />
         <div className="main-content">
+          {error && (
+            <div className="error-message">
+              {error}
+            </div>
+          )}
           {albums.map(album => (
             <AlbumView
               key={album.id}
@@ -63,18 +73,30 @@ const App: React.FC = () => {
         <Player
           currentSong={currentSong}
           onNext={() => {
-            const currentAlbum = albums.find(album => album.songs.some(s => s.id === currentSong?.id));
+            const currentAlbum = albums.find(album =>
+              album.songs.some(s => s.id === currentSong?.id)
+            );
             if (currentAlbum) {
-              const currentIndex = currentAlbum.songs.findIndex(s => s.id === currentSong?.id);
-              const nextSong = currentAlbum.songs[(currentIndex + 1) % currentAlbum.songs.length];
+              const currentIndex = currentAlbum.songs.findIndex(
+                s => s.id === currentSong?.id
+              );
+              const nextSong = currentAlbum.songs[
+                (currentIndex + 1) % currentAlbum.songs.length
+              ];
               setCurrentSong(nextSong);
             }
           }}
           onPrevious={() => {
-            const currentAlbum = albums.find(album => album.songs.some(s => s.id === currentSong?.id));
+            const currentAlbum = albums.find(album =>
+              album.songs.some(s => s.id === currentSong?.id)
+            );
             if (currentAlbum) {
-              const currentIndex = currentAlbum.songs.findIndex(s => s.id === currentSong?.id);
-              const prevSong = currentAlbum.songs[(currentIndex - 1 + currentAlbum.songs.length) % currentAlbum.songs.length];
+              const currentIndex = currentAlbum.songs.findIndex(
+                s => s.id === currentSong?.id
+              );
+              const prevSong = currentAlbum.songs[
+                (currentIndex - 1 + currentAlbum.songs.length) % currentAlbum.songs.length
+              ];
               setCurrentSong(prevSong);
             }
           }}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ipcRenderer } from 'electron';
 import '../styles/titlebar.css';
 import { API_URL } from "../../urlConfig";
+import {getAssetPath} from "../utils/assetPath";
 
 const TitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -37,7 +38,7 @@ const TitleBar: React.FC = () => {
     <div className="titlebar">
       <div className="titlebar-left">
         <img
-          src={`${API_URL}/images/mascot.png`}
+          src={getAssetPath('images/mascot.png')}
           alt="Waifu Mascot"
           className="titlebar-mascot"
         />

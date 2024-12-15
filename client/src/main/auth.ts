@@ -99,6 +99,8 @@ export class AuthHandler {
   }
 
   async getUserInfo() {
+    console.log("Getting user info");
+  console.log("Stored server token:", this.getServerToken());
  console.dir("Stored tokens:", this.store.get('tokens'));
  console.dir("OAuth credentials:", this.oAuth2Client.credentials);
 
@@ -128,25 +130,22 @@ export class AuthHandler {
 
 private async validateWithServer(accessToken: string) {
   try {
-    console.log(`${API_URL}/api/auth/google`);
+    console.log('Validating with server...');
     const response = await fetch(`${API_URL}/api/auth/google`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        googleToken: accessToken  // This matches your server's expected format
+        googleToken: accessToken
       })
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Server validation failed: ${errorText}`);
-    }
-
     const data = await response.json();
-    if (!data.token || !data.user) {
-      throw new Error('Invalid server response format');
+    console.log('Server validation response:', data);
+
+    if (data.token) {
+      console.log('Received server token:', data.token.substring(0, 10) + '...');
     }
 
     return data;
@@ -254,7 +253,9 @@ private async validateWithServer(accessToken: string) {
 
   // Add method to get server token
   getServerToken(): string | null {
-    return this.store.get('serverToken') as string | null;
+    const token = this.store.get('serverToken') as string | null;
+  console.log('Getting server token:', token ? 'exists' : 'missing');
+  return token;
   }
 
   // Add method to get stored user

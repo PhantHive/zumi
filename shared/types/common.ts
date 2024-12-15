@@ -14,3 +14,13 @@ export interface Album {
   coverImage?: string;
   songs: Song[];
 }
+
+export const GENRES = [
+  'Epic Rap',
+  'K-Pop',
+  'Lo-fi Emotional',
+  'Inspirational Pop',
+  'Ambient Cinematic'
+] as const;
+
+export type Genre = typeof GENRES[number];

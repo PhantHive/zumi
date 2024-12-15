@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/loading.css';
+import {API_URL} from "../../urlConfig";
+import {getAssetPath} from "../utils/assetPath";
 
 function Loading() {
   const [voice, setVoice] = useState<HTMLAudioElement | null>(null);
@@ -33,11 +35,8 @@ const visualizerSettings = {
 
   useEffect(() => {
     const voiceNumber = Math.floor(Math.random() * 3) + 1;
-    const audio = new Audio(
-      process.env.NODE_ENV === 'development'
-        ? `/public/voices/zumi-${voiceNumber}.mp3`
-        : `/voices/zumi-${voiceNumber}.mp3`
-    );
+    const audio = new Audio(getAssetPath(`voices/zumi-${voiceNumber}.mp3`));
+
     setVoice(audio);
     setGreeting(greetings[Math.floor(Math.random() * greetings.length)]);
 
@@ -51,7 +50,16 @@ const visualizerSettings = {
     audioContextRef.current = audioContext;
     analyserRef.current = analyser;
 
-    audio.play();
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log('Audio played');
+        })
+        .catch((error) => {
+          console.error('Audio play error:', error);
+        });
+    }
 
    const animate = () => {
  const canvas = canvasRef.current;
@@ -112,8 +120,8 @@ const visualizerSettings = {
          />
          <img
            src={process.env.NODE_ENV === 'development'
-             ? '/public/images/zumi.png'
-             : '/images/zumi.png'}
+             ? './public/images/zumi.png'
+             : `${API_URL}/images/zumi.png`}
            alt="Zumi"
            className="waifu-image"
          />

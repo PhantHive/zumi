@@ -57,8 +57,8 @@
 }
 
 .thumbnail {
-  width: 60px;
-  height: 60px;
+  width: 10vw;
+  height: auto;
   border-radius: 8px;
   object-fit: cover;
   box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
@@ -66,7 +66,7 @@
   cursor: pointer;
 }
 
-.thumbnail.active {
+.thumbnail:active {
   position: fixed;
   z-index: 100;
   bottom: 5vh;

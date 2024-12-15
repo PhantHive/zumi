@@ -39,12 +39,6 @@ body::before {
   height: 100vh;
 }
 
-.sidebar {
-  background: var(--background-dark);
-  padding: 20px;
-  backdrop-filter: blur(10px);
-}
-
 .main-content {
   padding: 20px;
   overflow-y: auto;
@@ -73,45 +67,6 @@ body::before {
   background: rgba(255, 255, 255, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.5);
 }
-
-.upload-section input[type="file"] {
-  display: none;
-}
-
-.upload-section label {
-  display: inline-block;
-  padding: 10px 20px;
-  margin-bottom: 10px;
-  background: var(--primary-color);
-  color: white;
-  border-radius: 25px;
-  cursor: pointer;
-  transition: transform 0.3s, box-shadow 0.3s;
-  text-align: center;
-}
-
-.upload-section label:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
-.upload-section button {
-  display: inline-block;
-  padding: 10px 20px;
-  background: var(--secondary-color);
-  color: white;
-  border: none;
-  border-radius: 25px;
-  cursor: pointer;
-  transition: transform 0.3s, box-shadow 0.3s;
-  text-align: center;
-}
-
-.upload-section button:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-
 
 .hidden {
   display: none;
