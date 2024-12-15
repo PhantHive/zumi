@@ -50,16 +50,19 @@ const visualizerSettings = {
     audioContextRef.current = audioContext;
     analyserRef.current = analyser;
 
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          console.log('Audio played');
-        })
-        .catch((error) => {
-          console.error('Audio play error:', error);
-        });
-    }
+   const playPromise = audio.play();
+if (playPromise !== undefined) {
+  playPromise
+    .then(() => {
+      console.log('Audio played successfully');
+    })
+    .catch((error) => {
+      // Ignore AbortError as it's a normal part of rapid play/pause interactions
+      if (error.name !== 'AbortError') {
+        console.error('Unexpected audio play error:', error);
+      }
+    });
+}
 
    const animate = () => {
  const canvas = canvasRef.current;
