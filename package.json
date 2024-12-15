@@ -22,7 +22,9 @@
         "copy-public": "copyfiles -u 1 public/**/* dist/client/public/",
         "lint": "eslint --config eslint.config.js .",
         "lint:fix": "eslint --config eslint.config.js --fix .",
-        "prettier": "prettier --write ."
+        "prettier": "prettier --write .",
+        "prepare": "husky init",
+        "lint:commit": "lint-staged"
     },
     "build": {
         "appId": "com.zumi.musicplayer",
