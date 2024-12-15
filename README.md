@@ -10,6 +10,12 @@
 - Lyrics are 100% E.T.H.I.C.A.L, no bad words, no bad content, no bad influence, no drugs, no alcohol, no violence and much more.
 - This is a private project that will never be deployed widely. We use it only for our own purposes.
 
+### About Zumi:
+
+![zumi.gif](zumi.gif)
+
+_Hi! I'm Zumi, the kawaii music maid at your service. I will load your music and play it for you. I will also help you to find the music you want to listen to. I'm here to make your life more fun and more enjoyable. Let's have fun together!_
+
 ### Features:
 
 - Play music. (obviously) 🎃
