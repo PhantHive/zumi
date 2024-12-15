@@ -12,6 +12,10 @@ interface Suggestions {
   artists: string[];
 }
 
+interface UserProfile {
+  name: string;
+}
+
 const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
   const audioInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -26,24 +30,25 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
   const [showAlbumSuggestions, setShowAlbumSuggestions] = useState(false);
   const [showArtistSuggestions, setShowArtistSuggestions] = useState(false);
 
-  useEffect(() => {
-    const fetchSuggestions = async () => {
-      try {
-        const [albumsRes, artistsRes] = await Promise.all([
-          apiClient.get<{ data: string[] }>('/api/songs/albums'),
-          apiClient.get<{ data: string[] }>('/api/songs/artists')
-        ]);
-        setSuggestions({
-          albums: albumsRes.data,
-          artists: artistsRes.data
-        });
-      } catch (error) {
-        console.error('Failed to fetch suggestions:', error);
-      }
-    };
+// Sidebar.tsx
+useEffect(() => {
+  const fetchSuggestions = async () => {
+    try {
+      const [albumsRes, artistsRes] = await Promise.all([
+        apiClient.get<{ data: string[] }>('/api/songs/albums'),
+        apiClient.get<{ data: string[] }>('/api/songs/artists')
+      ]);
+      setSuggestions({
+        albums: albumsRes.data,
+        artists: artistsRes.data
+      });
+    } catch (error) {
+      console.error('Failed to fetch suggestions:', error);
+    }
+  };
 
-    fetchSuggestions();
-  }, []);
+  fetchSuggestions();
+}, []);
 
   const handleUpload = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault(); // Prevent the default form submission
@@ -95,20 +100,26 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
   // get user info name and display it
     const [userName, setUserName] = useState('');
     useEffect(() => {
-        const fetchUserInfo = async () => {
-            try {
-                const response = await apiClient.get<{ data: string }>('/api/auth/profile');
-                console.log('User info response:', response);
-                setUserName(response.data);
-            } catch (error) {
-                console.error('Failed to fetch user info:', error);
-            }
-        };
+  const fetchUserInfo = async () => {
+    try {
+      const response = await apiClient.get<{ data: UserProfile }>('/api/auth/profile');
+      console.log('User info response:', response);
+      if (response) {
+        const { data } = response;
+        console.log('User info data:', data);
+        if (data.name) {
+          setUserName(data.name);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch user info:', error);
+    }
+  };
 
-        fetchUserInfo().then(
-            () => console.log('User info fetched:', userName)
-        )
-    }, []);
+  fetchUserInfo().then(
+    () => console.log('User info fetched:', userName)
+  );
+}, []);
 
   return (
     <div className="sidebar">

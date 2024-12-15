@@ -21,25 +21,27 @@ export class SongController {
     }
   };
 
-  // get top artists suggestions
-    getArtists: RequestHandler = async (_req, res) => {
-        try {
-        const artists = await db.getUniqueArtists();
-        res.json({ data: artists });
-        } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch artists' });
-        }
-    };
+  getArtists: RequestHandler = async (_req, res) => {
+    try {
+      console.log('Fetching artists - Request received');
+      const artists = await db.getUniqueArtists();
+      console.log('Artists found:', artists);
+      res.json({ data: artists });
+    } catch (error) {
+      console.error('Error in getArtists:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 
-    // get top albums suggestions
-    getAlbums: RequestHandler = async (_req, res) => {
-        try {
-        const albums = await db.getUniqueAlbums();
-        res.json({ data: albums });
-        } catch (error) {
-        res.status(500).json({ error: 'Failed to fetch albums' });
-        }
-    };
+  getAlbums: RequestHandler = async (_req, res) => {
+    try {
+      const albums = await db.getUniqueAlbums();
+      res.json({ data: albums });
+    } catch (error) {
+      console.error('Error fetching albums:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 
   getSong: RequestHandler = async (req, res) => {
     try {

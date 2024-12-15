@@ -41,13 +41,18 @@ const upload = multer({ storage });
 
 // Routes
 router.use(auth);
+
 router.get('/', songController.getAllSongs);
+router.get('/artists', songController.getArtists);
+router.get('/albums', songController.getAlbums);
+
 router.get('/:id', songController.getSong);
 router.get('/:id/stream', songController.streamSong);
 router.post('/', upload.fields([
   { name: 'audio', maxCount: 1 },
   { name: 'thumbnail', maxCount: 1 }
 ]), songController.createSong);
+
 
 router.get('/thumbnails/:filename', (req, res) => {
   const { filename } = req.params;
@@ -68,9 +73,6 @@ router.get('/thumbnails/:filename', (req, res) => {
     }
   });
 });
-
-router.get('/artists', songController.getArtists);
-router.get('/albums', songController.getAlbums);
 
 export const staticPaths = {
   uploads: isDev ? path.join(PROJECT_ROOT, 'public', 'uploads') : '/app/uploads',

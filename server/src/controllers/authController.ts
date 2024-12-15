@@ -89,18 +89,15 @@ export class AuthController {
 
   async getProfile(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const user = await User.findById(req.user.id)
-        .populate('playlists.songs');
-
+      const user = req.user; // Assuming user is added to req by auth middleware
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
       res.json({ data: user });
     } catch (error) {
       console.error('Error fetching profile:', error);
-      res.status(500).json({ error: 'Failed to fetch profile' });
+      res.status(500).json({ error: 'Internal Server Error' });
     }
   }
 }

@@ -27,6 +27,7 @@ class ApiClient {
       const headers = await this.getAuthHeaders();
       console.log('Making request with headers:', headers);
 
+      console.log('Making request to:', `${API_URL}${endpoint}`);
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'GET',
         headers
