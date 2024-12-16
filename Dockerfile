@@ -16,11 +16,12 @@ RUN mkdir -p /app/uploads/thumbnails /app/data && \
 
 EXPOSE ${PORT}
 
-CMD if [ -z "$PORT" ] || [ -z "$MONGODB_URI" ] || [ -z "$JWT_SECRET" ]; then \
-    echo "Error: Required environment variables are not set"; \
-    exit 1; \
-    else \
-    node dist/server/src/server.js; \
-    fi
+# Add a healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "try { require('http').get('http://localhost:' + process.env.PORT + '/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1)); } catch (e) { process.exit(1); }"
 
+# Validate environment variables and start application
+COPY docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "dist/server/src/server.js"]

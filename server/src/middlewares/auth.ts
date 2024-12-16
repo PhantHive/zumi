@@ -13,17 +13,42 @@ const auth = async (
 ): Promise<void> => {
     try {
         const authHeader = req.headers.authorization;
-        console.log('Auth header:', authHeader); // Debug log
+        console.log('Auth header:', authHeader); // Log full header
 
-        const token = authHeader?.startsWith('Bearer ')
-            ? authHeader.substring(7)
-            : null;
-
-        console.log('Extracted token:', token ? 'exists' : 'null'); // Debug log
-
-        if (!token) {
+        // Validate header format
+        if (!authHeader) {
             res.status(401).json({
-                error: 'Please authenticate - No token provided',
+                error: 'No authorization header found',
+            });
+            return;
+        }
+
+        if (!authHeader.startsWith('Bearer ')) {
+            console.log(
+                'Invalid header format. Expected "Bearer", got:',
+                authHeader.split(' ')[0],
+            );
+            res.status(401).json({
+                error: 'Invalid authorization header format',
+            });
+            return;
+        }
+
+        const token = authHeader.substring(7);
+
+        // Log token structure
+        const tokenParts = token.split('.');
+        console.log('Token parts count:', tokenParts.length);
+        console.log('Token structure validation:');
+        console.log('- Has header:', !!tokenParts[0]);
+        console.log('- Has payload:', !!tokenParts[1]);
+        console.log('- Has signature:', !!tokenParts[2]);
+
+        if (tokenParts.length !== 3) {
+            res.status(401).json({
+                error:
+                    'Malformed token structure. Expected 3 parts, got: ' +
+                    tokenParts.length,
             });
             return;
         }
@@ -38,30 +63,39 @@ const auth = async (
                 token,
                 process.env.JWT_SECRET,
             ) as JwtPayload;
-            console.log('Decoded token userId:', decoded.userId); // Debug log
+            console.log('Token successfully decoded. UserId:', decoded.userId);
 
             const user = await User.findById(decoded.userId);
-            console.log('Found user:', user ? 'yes' : 'no'); // Debug log
-
             if (!user) {
                 res.status(401).json({
-                    error: 'Please authenticate - User not found',
+                    error: 'User not found',
                 });
                 return;
             }
 
             req.user = user;
             next();
-        } catch (jwtError) {
-            console.error('JWT verification failed:', jwtError);
+        } catch (jwtError: unknown) {
+            if (!(jwtError instanceof Error)) {
+                console.error('JWT verification error:', jwtError);
+                res.status(401).json({
+                    error: 'Token verification failed',
+                });
+                return;
+            }
+            console.error('JWT verification details:', {
+                error: jwtError.message,
+                name: jwtError.name,
+                stack: jwtError.stack,
+            });
             res.status(401).json({
-                error: 'Please authenticate - Invalid token',
+                error: `Token verification failed: ${jwtError.message}`,
             });
             return;
         }
     } catch (error) {
         console.error('Auth middleware error:', error);
-        res.status(401).json({ error: 'Please authenticate - Server error' });
+        res.status(401).json({ error: 'Server authentication error' });
     }
 };
 
