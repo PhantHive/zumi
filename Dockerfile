@@ -16,7 +16,7 @@ RUN mkdir -p /app/uploads/thumbnails /app/data && \
 
 EXPOSE ${PORT}
 
-CMD if [ -z "$PORT" ] || [ -z "$MONGODB_URI" ]; then \
+CMD if [ -z "$PORT" ] || [ -z "$MONGODB_URI" ] || [ -z "$JWT_SECRET" ]; then \
     echo "Error: Required environment variables are not set"; \
     exit 1; \
     else \

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/loading.css';
-import { API_URL } from '../../urlConfig';
 import { getAssetPath } from '../utils/assetPath';
 
 function Loading() {
@@ -127,11 +126,7 @@ function Loading() {
                         className="spectrum-canvas"
                     />
                     <img
-                        src={
-                            process.env.NODE_ENV === 'development'
-                                ? './public/images/zumi.png'
-                                : `${API_URL}/images/zumi.png`
-                        }
+                        src={getAssetPath('images/zumi.png')}
                         alt="Zumi"
                         className="waifu-image"
                     />

@@ -14,6 +14,8 @@ declare module 'electron-store' {
             name?: string;
             encryptionKey?: string;
             defaults?: Partial<T>;
+            clearInvalidConfig?: boolean;
+            cwd?: string;
         });
         get<K extends keyof T>(key: K): T[K];
         set<K extends keyof T>(key: K, value: T[K]): void;

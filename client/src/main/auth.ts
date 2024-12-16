@@ -1,8 +1,10 @@
-import { BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, session } from 'electron';
 import { OAuth2Client } from 'google-auth-library';
 import { authConfig } from '../config/auth.js';
 import Store from 'electron-store';
 import { API_URL } from '../urlConfig.js';
+import path from 'path';
+import fs from 'fs';
 
 interface AuthTokens {
     access_token: string;
@@ -23,7 +25,17 @@ interface StoreSchema {
     tokens: AuthTokens;
     serverToken: string;
     user: UserData;
+    test: string;
 }
+
+let prodEnv = {
+    GOOGLE_CLIENT_ID: '',
+    GOOGLE_CLIENT_SECRET: '',
+    STORE_ENCRYPTION_KEY: '',
+    JWT_SECRET: '',
+};
+
+const isDev = process.env.NODE_ENV === 'development';
 
 export class AuthHandler {
     private oAuth2Client: OAuth2Client;
@@ -32,23 +44,67 @@ export class AuthHandler {
         resolve: (value: string) => void;
         reject: (reason?: unknown) => void;
     } | null = null;
-    private store: Store<StoreSchema>;
+    private store: Store<StoreSchema> | undefined;
 
     constructor() {
+        this.logToFile('Initializing AuthHandler...');
+        this.logToFile(`Environment: ${isDev ? 'development' : 'production'}`);
+
+        if (!isDev) {
+            try {
+                const envPath = path.join(process.resourcesPath, 'env.json');
+                this.logToFile(`Loading env from: ${envPath}`);
+                const envContent = fs.readFileSync(envPath, 'utf8');
+                prodEnv = JSON.parse(envContent);
+                this.logToFile('Env loaded successfully');
+            } catch (err) {
+                this.logToFile(`Failed to load production environment: ${err}`);
+            }
+        }
+
+        const encryptionKey = isDev
+            ? process.env.STORE_ENCRYPTION_KEY
+            : prodEnv.STORE_ENCRYPTION_KEY;
+        this.logToFile(`Store encryption key exists: ${!!encryptionKey}`);
+
+        // Try different store configurations
+        try {
+            this.store = new Store<StoreSchema>({
+                name: 'auth',
+                encryptionKey,
+                clearInvalidConfig: true, // Add this
+                cwd: isDev
+                    ? undefined
+                    : path.join(process.resourcesPath, 'storage'), // Add this
+            });
+
+            // Test store
+            this.store.set('test', 'test-value');
+            const testValue = this.store.get('test');
+            this.logToFile(`Store test result: ${testValue === 'test-value'}`);
+            this.store.delete('test');
+        } catch (err) {
+            this.logToFile(`Store initialization failed: ${err}`);
+        }
+
         this.oAuth2Client = new OAuth2Client({
             clientId: authConfig.clientId,
             clientSecret: authConfig.clientSecret,
             redirectUri: authConfig.redirectUri,
         });
-        this.store = new Store<StoreSchema>({
-            name: 'auth',
-            encryptionKey: process.env.STORE_ENCRYPTION_KEY,
-        });
 
+        // Initialize store and restore previous session if exists
         this.initializeStore().then(
-            () => console.log('Store initialized'),
-            (error) => console.error('Store initialization error:', error),
+            () => console.log('Store initialized successfully'),
+            (error) => console.error('Store initialization failed:', error),
         );
+    }
+
+    private logToFile(message: string) {
+        const logPath = isDev
+            ? path.join(__dirname, 'auth.log')
+            : path.join(app.getPath('userData'), 'auth.log');
+        fs.appendFileSync(logPath, `${new Date().toISOString()}: ${message}\n`);
     }
 
     private async refreshToken() {
@@ -67,16 +123,18 @@ export class AuthHandler {
                 expiry_date: credentials.expiry_date ?? Date.now() + 3600000,
             };
 
-            this.store.set('tokens', validCredentials);
+            this.store?.set('tokens', validCredentials);
             this.oAuth2Client.setCredentials(validCredentials);
         } catch (error) {
-            this.store.delete('tokens');
+            this.store?.delete('tokens');
             throw error;
         }
     }
 
     private async initializeStore() {
-        const storedTokens = this.store.get('tokens') as AuthTokens | undefined;
+        const storedTokens = this.store?.get('tokens') as
+            | AuthTokens
+            | undefined;
         if (storedTokens?.access_token) {
             if (
                 storedTokens.expiry_date &&
@@ -105,7 +163,7 @@ export class AuthHandler {
     async getUserInfo() {
         console.log('Getting user info');
         console.log('Stored server token:', this.getServerToken());
-        console.dir('Stored tokens:', this.store.get('tokens'));
+        console.dir('Stored tokens:', this.store?.get('tokens'));
         console.dir('OAuth credentials:', this.oAuth2Client.credentials);
 
         if (!this.oAuth2Client.credentials?.access_token) {
@@ -137,31 +195,57 @@ export class AuthHandler {
 
     private async validateWithServer(accessToken: string) {
         try {
-            console.log('Validating with server...');
+            this.logToFile('=== Server Validation Start ===');
+            this.logToFile(`API URL: ${API_URL}`);
+            this.logToFile(`Access token exists: ${!!accessToken}`);
+
             const response = await fetch(`${API_URL}/api/auth/google`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    Authorization: `Bearer ${accessToken}`, // Add the token in the header
                 },
-                body: JSON.stringify({
-                    googleToken: accessToken,
-                }),
+                body: JSON.stringify({}), // You can remove the token from body if not needed
             });
 
-            const data = await response.json();
-            console.log('Server validation response:', data);
+            this.logToFile(`Response status: ${response.status}`);
+            const rawText = await response.text();
+            this.logToFile(`Server response: ${rawText}`);
+
+            const data = JSON.parse(rawText);
+            this.logToFile(`Has token in response: ${!!data.token}`);
 
             if (data.token) {
-                console.log(
-                    'Received server token:',
-                    data.token.substring(0, 10) + '...',
-                );
+                try {
+                    this.store?.set('serverToken', data.token);
+                    const verifyToken = this.store?.get('serverToken');
+                    this.logToFile(
+                        `Token stored and verified: ${!!verifyToken}`,
+                    );
+                } catch (err) {
+                    this.logToFile(`Failed to store token: ${err}`);
+                }
             }
 
             return data;
         } catch (error) {
-            console.error('Server validation error:', error);
+            this.logToFile(`Server validation error: ${error}`);
             throw error;
+        }
+    }
+
+    getServerToken(): string | null {
+        console.log('=== Getting Server Token ===');
+        try {
+            const token = this.store?.get('serverToken') as string | null;
+            console.log('Token retrieval:', {
+                exists: !!token,
+                value: token ? token.substring(0, 20) + '...' : 'none',
+            });
+            return token;
+        } catch (err) {
+            console.error('Error getting server token:', err);
+            return null;
         }
     }
 
@@ -225,7 +309,7 @@ export class AuthHandler {
             };
 
             this.oAuth2Client.setCredentials(validTokens);
-            this.store.set('tokens', validTokens);
+            this.store?.set('tokens', validTokens);
 
             // After Google OAuth success, validate with our server
             const serverAuth = await this.validateWithServer(
@@ -233,8 +317,8 @@ export class AuthHandler {
             );
 
             // Store the server JWT token
-            this.store.set('serverToken', serverAuth.token);
-            this.store.set('user', serverAuth.user);
+            this.store?.set('serverToken', serverAuth.token);
+            this.store?.set('user', serverAuth.user);
 
             if (this.authWindow && !this.authWindow.isDestroyed()) {
                 this.authWindow.close();
@@ -255,20 +339,13 @@ export class AuthHandler {
     // Update signOut to also clear server tokens
     async signOut(): Promise<void> {
         try {
-            this.store.delete('tokens');
-            this.store.delete('serverToken'); // Clear server JWT
-            this.store.delete('user'); // Clear user data
+            this.store?.delete('tokens');
+            this.store?.delete('serverToken'); // Clear server JWT
+            this.store?.delete('user'); // Clear user data
             await this.oAuth2Client.revokeCredentials();
             await session.defaultSession.clearStorageData();
         } catch (error) {
             throw error instanceof Error ? error : new Error('Sign out failed');
         }
-    }
-
-    // Add method to get server token
-    getServerToken(): string | null {
-        const token = this.store.get('serverToken') as string | null;
-        console.log('Getting server token:', token ? 'exists' : 'missing');
-        return token;
     }
 }

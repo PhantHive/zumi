@@ -1,13 +1,13 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { app, BrowserWindow, ipcMain, session } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { DiscordPresence } from './discordRPC.js';
 import { AuthHandler } from './auth.js';
 import { fileURLToPath } from 'url';
-import { API_URL } from '../urlConfig.js';
 import { ThumbnailToolbar } from './thumbnailToolbar.js';
+import { promises as fs } from 'fs';
 
 const discordRPC = new DiscordPresence();
 const authHandler = new AuthHandler();
@@ -15,7 +15,7 @@ const authHandler = new AuthHandler();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-function createWindow() {
+async function createWindow() {
     const isDev = process.env.NODE_ENV === 'development';
     console.log('Running in:', process.env.NODE_ENV, 'mode');
     console.log('Current __dirname:', __dirname);
@@ -28,9 +28,25 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
+            webSecurity: false,
+            devTools: true,
         },
         // If you want to show a custom icon in the taskbar
         icon: path.join(__dirname, '../assets/icon.png'),
+    });
+
+    // Add these event listeners
+    win.webContents.on(
+        'did-fail-load',
+        (event, errorCode, errorDescription) => {
+            console.error('Failed to load:', errorCode, errorDescription);
+        },
+    );
+
+    win.webContents.on('did-finish-load', () => {
+        console.log('Finished loading');
+        // Open DevTools in production to debug
+        win.webContents.openDevTools();
     });
 
     win.setThumbnailToolTip('Zumi Chan');
@@ -59,32 +75,85 @@ function createWindow() {
         win.loadURL('http://localhost:31275');
         win.webContents.openDevTools();
     } else {
-        const rendererPath = path.join(__dirname, '../../renderer/index.html');
-        console.log('Trying to load renderer from:', rendererPath);
-        win.loadFile(rendererPath);
+        const rendererPath = path.resolve(
+            __dirname,
+            '../../renderer/index.html',
+        );
+        console.log('Current directory:', process.cwd());
+        console.log('__dirname:', __dirname);
+        console.log('Attempting to load renderer from:', rendererPath);
+
+        try {
+            // Check if file exists using async/await
+            const fileExists = await fs
+                .access(rendererPath)
+                .then(() => true)
+                .catch(() => false);
+
+            if (fileExists) {
+                console.log('File exists at path');
+                await win.loadFile(rendererPath);
+            } else {
+                console.error('File does not exist at path:', rendererPath);
+                // Try listing contents of renderer directory
+                const rendererDir = path.resolve(__dirname, '../../renderer');
+                try {
+                    const files = await fs.readdir(rendererDir);
+                    console.log('Contents of renderer directory:', files);
+                } catch (err) {
+                    console.error('Renderer directory not found', err);
+                }
+            }
+        } catch (err) {
+            console.error('Error checking file:', err);
+        }
     }
 }
 
 app.whenReady().then(() => {
     console.log('App is ready');
 
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-        callback({
-            responseHeaders: {
-                ...details.responseHeaders,
-                'Content-Security-Policy': [
-                    "default-src 'self';" +
-                        "script-src 'self' 'unsafe-inline';" +
-                        "style-src 'self' 'unsafe-inline';" +
-                        `connect-src 'self' ${API_URL};` +
-                        "img-src 'self' data: blob:;" +
-                        "font-src 'self';" +
-                        "object-src 'none';" +
-                        "media-src 'self' blob:;" +
-                        "frame-src 'none'",
-                ],
-            },
-        });
+    // session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    //     callback({
+    //         responseHeaders: {
+    //             ...details.responseHeaders,
+    //             'Content-Security-Policy': [
+    //                 "default-src 'self';" +
+    //                 "script-src 'self' 'unsafe-inline';" +
+    //                 "style-src 'self' 'unsafe-inline';" +
+    //                 `connect-src 'self' ${API_URL};` +
+    //                 // Update img-src to include your server URL
+    //                 `img-src 'self' data: blob: ${API_URL};` +
+    //                 "font-src 'self';" +
+    //                 "object-src 'none';" +
+    //                 "media-src 'self' blob:;" +
+    //                 "frame-src 'none'",
+    //             ],
+    //         },
+    //     });
+    // });
+
+    const isDev = process.env.NODE_ENV === 'development';
+
+    // Only set up protocol client in production
+    if (!isDev) {
+        if (process.defaultApp) {
+            if (process.argv.length >= 2) {
+                app.setAsDefaultProtocolClient('zumi', process.execPath, [
+                    process.argv[1],
+                ]);
+            }
+        } else {
+            app.setAsDefaultProtocolClient('zumi');
+        }
+    }
+
+    // Handle callback in production
+    app.on('open-url', (event, url) => {
+        event.preventDefault();
+        if (!isDev) {
+            authHandler.handleCallback(url);
+        }
     });
 
     const win = BrowserWindow.getFocusedWindow();

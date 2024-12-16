@@ -1,7 +1,24 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
-const Dotenv = require('dotenv-webpack');
+// const Dotenv = require('dotenv-webpack');
+const webpack = require('webpack');
 const CopyPlugin = require('copy-webpack-plugin');
+const dotenv = require('dotenv');
+
+// Load env vars
+const result = dotenv.config();
+if (result.error) {
+    console.error('Error loading .env file:', result.error);
+    process.exit(1);
+}
+
+const env = result.parsed;
+console.log('Building with environment variables:', {
+    GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID ? 'defined' : 'undefined',
+    GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET ? 'defined' : 'undefined'
+});
+
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
 module.exports = {
     mode: process.env.NODE_ENV || 'development',
@@ -10,7 +27,7 @@ module.exports = {
     output: {
         path: path.join(__dirname, 'dist/client/renderer'),
         filename: 'bundle.js',
-        publicPath: '/',
+        publicPath: isDevelopment ? '/' : './',
     },
     module: {
         rules: [
@@ -47,9 +64,14 @@ module.exports = {
             inject: true,
             template: path.join(__dirname, 'client/src/renderer/index.html'),
         }),
-        new Dotenv({
-            path: './.env',
-            systemvars: true,
+        new webpack.DefinePlugin({
+            'process.env': {
+                NODE_ENV: JSON.stringify(process.env.NODE_ENV),
+                GOOGLE_CLIENT_ID: JSON.stringify(env.GOOGLE_CLIENT_ID),
+                GOOGLE_CLIENT_SECRET: JSON.stringify(env.GOOGLE_CLIENT_SECRET),
+                JWT_SECRET: JSON.stringify(env.JWT_SECRET),
+                STORE_ENCRYPTION_KEY: JSON.stringify(env.STORE_ENCRYPTION_KEY),
+            }
         }),
         new CopyPlugin({
             patterns: [
@@ -67,12 +89,12 @@ module.exports = {
             },
             {
                 directory: path.join(__dirname, 'public'),
-                publicPath: '/public',
+                publicPath: isDevelopment ? '/public' : '../public'
             },
         ],
         compress: true,
         port: 31275,
         hot: true,
     },
-    devtool: 'source-map',
+    devtool: isDevelopment ? 'source-map' : false,
 };
