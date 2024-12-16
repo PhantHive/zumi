@@ -65,30 +65,31 @@ jobs:
                   # Stop and remove existing container
                   docker stop music-server || true
                   docker rm music-server || true
-
+                  
                   # Create directories
                   mkdir -p /opt/music-server/uploads/thumbnails
                   mkdir -p /opt/music-server/data
-
+                  
                   # Load and validate API_PORT
                   API_PORT=$(grep API_PORT /home/Phearion/Zumi/.env | cut -d '=' -f2 | tr -d '\r\n ')
                   
-                  echo "Checking JWT_SECRET in .env..."
-                  grep JWT_SECRET /home/Phearion/Zumi/.env || echo "JWT_SECRET not found!"
-
+                  echo "Checking environment variables in .env..."
+                  grep -E "API_PORT|JWT_SECRET|MONGODB_URI" /home/Phearion/Zumi/.env || echo "Missing required variables!"
+                  
                   # Debug: Print the port to verify its value
                   echo "Using API_PORT: $API_PORT"
-
+                  
                   # Run docker with env-file
                   docker run \
-                    -d \
-                    --name music-server \
-                    --env-file /home/Phearion/Zumi/.env \
-                    -p "${API_PORT}:${API_PORT}" \
-                    -v /opt/music-server/uploads:/app/uploads \
-                    -v /opt/music-server/data:/app/data \
-                    zaphial/music-server:${{ env.TAG_NAME }}
-
+                      -d \
+                      --name music-server \
+                      --env-file /home/Phearion/Zumi/.env \
+                      -e PORT=$API_PORT \
+                      -p "${API_PORT}:${API_PORT}" \
+                      -v /opt/music-server/uploads:/app/uploads \
+                      -v /opt/music-server/data:/app/data \
+                      zaphial/music-server:${{ env.TAG_NAME }}
+                  
                   # Check if container started successfully
                   echo "Checking container logs..."
                   sleep 2
