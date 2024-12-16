@@ -197,15 +197,17 @@ export class AuthHandler {
         try {
             this.logToFile('=== Server Validation Start ===');
             this.logToFile(`API URL: ${API_URL}`);
-            this.logToFile(`Access token exists: ${!!accessToken}`);
+            this.logToFile(`Google access token exists: ${!!accessToken}`);
 
             const response = await fetch(`${API_URL}/api/auth/google`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${accessToken}`, // Add the token in the header
+                    Authorization: `Bearer ${accessToken}`, // Empty bearer token
                 },
-                body: JSON.stringify({}), // You can remove the token from body if not needed
+                body: JSON.stringify({
+                    googleToken: accessToken,
+                }),
             });
 
             this.logToFile(`Response status: ${response.status}`);
@@ -217,6 +219,8 @@ export class AuthHandler {
 
             if (data.token) {
                 try {
+                    const tokenParts = data.token.split('.');
+                    this.logToFile(`Received JWT parts: ${tokenParts.length}`);
                     this.store?.set('serverToken', data.token);
                     const verifyToken = this.store?.get('serverToken');
                     this.logToFile(
@@ -238,10 +242,15 @@ export class AuthHandler {
         console.log('=== Getting Server Token ===');
         try {
             const token = this.store?.get('serverToken') as string | null;
-            console.log('Token retrieval:', {
-                exists: !!token,
-                value: token ? token.substring(0, 20) + '...' : 'none',
-            });
+            if (token) {
+                const parts = token.split('.');
+                console.log('Retrieved token structure:', {
+                    parts: parts.length,
+                    hasHeader: !!parts[0],
+                    hasPayload: !!parts[1],
+                    hasSignature: !!parts[2],
+                });
+            }
             return token;
         } catch (err) {
             console.error('Error getting server token:', err);
