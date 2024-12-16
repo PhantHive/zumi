@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import '../styles/loading.css';
 import { getAssetPath } from '../utils/assetPath';
+import { AudioManager } from '../utils/audioManager';
 
-function Loading() {
-    const [, setVoice] = useState<HTMLAudioElement | null>(null);
+const Loading: React.FC = React.memo(() => {
+    Loading.displayName = 'Loading';
     const [greeting, setGreeting] = useState('');
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const animationRef = useRef<number>(0);
+    const mountCountRef = useRef(0);
 
     const greetings = [
         'Konnichiwa! Loading your music...',
@@ -19,57 +21,61 @@ function Loading() {
     const centerImage = {
         x: 200,
         y: 200,
-        radius: 140, // Half of waifu image width
+        radius: 140,
     };
 
     const visualizerSettings = {
-        radius: 150, // Slightly larger than image radius
+        radius: 150,
         bars: 180,
         barWidth: 2,
         barMaxHeight: 30,
-        color: 'rgba(147, 51, 234, 0.6)', // Semi-transparent purple
+        color: 'rgba(147, 51, 234, 0.6)',
     };
 
     useEffect(() => {
+        mountCountRef.current += 1;
+        const mountId = mountCountRef.current;
+        console.log(`Loading component mount #${mountId}`);
+
         const voiceNumber = Math.floor(Math.random() * 3) + 1;
-        const audio = new Audio(getAssetPath(`voices/zumi-${voiceNumber}.mp3`));
+        const audioPath = getAssetPath(`voices/zumi-${voiceNumber}.mp3`);
 
-        setVoice(audio);
+        const initializeAudio = async () => {
+            const result = await AudioManager.initialize(
+                voiceNumber,
+                audioPath,
+            );
+            if (result) {
+                audioContextRef.current = result.audioContext;
+                analyserRef.current = result.analyser;
+            }
+        };
+
         setGreeting(greetings[Math.floor(Math.random() * greetings.length)]);
+        initializeAudio();
+        setupVisualizer();
 
-        const audioContext = new AudioContext();
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        const source = audioContext.createMediaElementSource(audio);
-        source.connect(analyser);
-        analyser.connect(audioContext.destination);
+        return () => {
+            console.log(`Cleaning up Loading component mount #${mountId}`);
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+                animationRef.current = 0;
+            }
+        };
+    }, []);
 
-        audioContextRef.current = audioContext;
-        analyserRef.current = analyser;
-
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-            playPromise
-                .then(() => {
-                    console.log('Audio played successfully');
-                })
-                .catch((error) => {
-                    // Ignore AbortError as it's a normal part of rapid play/pause interactions
-                    if (error.name !== 'AbortError') {
-                        console.error('Unexpected audio play error:', error);
-                    }
-                });
-        }
-
+    const setupVisualizer = () => {
         const animate = () => {
             const canvas = canvasRef.current;
-            if (!canvas || !analyser) return;
+            if (!canvas) return;
 
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
 
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(dataArray);
+            const dataArray = AudioManager.getAnalyserData();
+            if (!dataArray) return;
+
+            analyserRef.current?.getByteFrequencyData(dataArray);
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.lineWidth = visualizerSettings.barWidth;
@@ -101,18 +107,7 @@ function Loading() {
             animationRef.current = requestAnimationFrame(animate);
         };
         animate();
-
-        return () => {
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
-            audio.pause();
-            audio.currentTime = 0;
-            if (audioContextRef.current) {
-                audioContextRef.current.close();
-            }
-        };
-    }, []);
+    };
 
     return (
         <div className="loading-container">
@@ -140,6 +135,6 @@ function Loading() {
             </div>
         </div>
     );
-}
+});
 
 export default Loading;

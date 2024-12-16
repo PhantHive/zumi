@@ -72,10 +72,7 @@ export class AuthHandler {
             this.store = new Store<StoreSchema>({
                 name: 'auth',
                 encryptionKey,
-                clearInvalidConfig: true, // Add this
-                cwd: isDev
-                    ? undefined
-                    : path.join(process.resourcesPath, 'storage'), // Add this
+                clearInvalidConfig: true,
             });
 
             // Test store
@@ -132,6 +129,7 @@ export class AuthHandler {
     }
 
     private async initializeStore() {
+        this.logToFile('=== Initializing Store ===');
         const storedTokens = this.store?.get('tokens') as
             | AuthTokens
             | undefined;
@@ -144,6 +142,8 @@ export class AuthHandler {
             }
             this.oAuth2Client.setCredentials(storedTokens);
         }
+
+        this.logToFile(`Stored tokens: ${JSON.stringify(storedTokens)}`);
     }
 
     handleCallback(url: string): void {
@@ -162,9 +162,31 @@ export class AuthHandler {
 
     async getUserInfo() {
         console.log('Getting user info');
-        console.log('Stored server token:', this.getServerToken());
-        console.dir('Stored tokens:', this.store?.get('tokens'));
-        console.dir('OAuth credentials:', this.oAuth2Client.credentials);
+
+        // Check if we have stored tokens
+        const storedTokens = this.store?.get('tokens') as
+            | AuthTokens
+            | undefined;
+
+        // write to log file
+        this.logToFile('=== Getting User Info ===');
+        this.logToFile('Getting user info');
+        this.logToFile(`Stored tokens: ${!!storedTokens?.access_token}`);
+
+        if (storedTokens?.access_token) {
+            this.oAuth2Client.setCredentials(storedTokens);
+
+            this.logToFile('Stored tokens exist');
+            this.logToFile(`Access token: ${storedTokens.access_token}`);
+            // Validate with server if we don't have a server token
+            if (!this.getServerToken()) {
+                try {
+                    await this.validateWithServer(storedTokens.access_token);
+                } catch (error) {
+                    console.error('Failed to validate with server:', error);
+                }
+            }
+        }
 
         if (!this.oAuth2Client.credentials?.access_token) {
             throw new Error('Not authenticated');
@@ -193,7 +215,7 @@ export class AuthHandler {
         }
     }
 
-    private async validateWithServer(accessToken: string) {
+    public async validateWithServer(accessToken: string) {
         try {
             this.logToFile('=== Server Validation Start ===');
             this.logToFile(`API URL: ${API_URL}`);
@@ -203,7 +225,7 @@ export class AuthHandler {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${accessToken}`, // Empty bearer token
+                    Authorization: `Bearer ${accessToken}`,
                 },
                 body: JSON.stringify({
                     googleToken: accessToken,
@@ -238,6 +260,20 @@ export class AuthHandler {
         }
     }
 
+    public async getStoredTokens(): Promise<AuthTokens | undefined> {
+        console.log('=== Getting Stored Tokens ===');
+        this.logToFile('Getting stored tokens');
+        const storedTokens = this.store?.get('tokens') as
+            | AuthTokens
+            | undefined;
+
+        if (storedTokens?.access_token) {
+            console.log('Stored tokens exist');
+            this.logToFile('Stored tokens exist');
+            return storedTokens;
+        }
+    }
+
     getServerToken(): string | null {
         console.log('=== Getting Server Token ===');
         try {
@@ -259,11 +295,31 @@ export class AuthHandler {
     }
 
     async signIn(): Promise<void> {
-        if (this.oAuth2Client.credentials?.access_token) {
-            console.log('Already authenticated');
-            return;
+        // Check if we have stored tokens
+        const storedTokens = await this.getStoredTokens();
+        if (storedTokens?.access_token) {
+            this.oAuth2Client.setCredentials(storedTokens);
+
+            // Validate with server if we don't have a server token
+            if (!this.getServerToken()) {
+                try {
+                    const serverAuth = await this.validateWithServer(
+                        storedTokens.access_token,
+                    );
+                    this.store?.set('serverToken', serverAuth.token);
+                    this.store?.set('user', serverAuth.user);
+                    console.log('Already authenticated with server');
+                    return;
+                } catch (error) {
+                    console.error('Failed to validate with server:', error);
+                }
+            } else {
+                console.log('Already authenticated');
+                return;
+            }
         }
 
+        // Proceed with OAuth flow if no valid stored tokens
         try {
             const authUrl = this.oAuth2Client.generateAuthUrl({
                 access_type: 'offline',
@@ -336,13 +392,6 @@ export class AuthHandler {
             console.error('Sign in error:', error);
             throw error instanceof Error ? error : new Error('Sign in failed');
         }
-    }
-
-    // Add this to your AuthHandler class
-    getAuthHeaders(): { Authorization: string } | null {
-        const token = this.getServerToken();
-        if (!token) return null;
-        return { Authorization: `Bearer ${token}` };
     }
 
     // Update signOut to also clear server tokens

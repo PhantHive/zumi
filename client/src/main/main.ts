@@ -31,8 +31,11 @@ async function createWindow() {
             webSecurity: false,
             devTools: true,
         },
-        // If you want to show a custom icon in the taskbar
         icon: path.join(__dirname, '../assets/icon.png'),
+    });
+
+    win.on('close', () => {
+        win.webContents.send('app-reset');
     });
 
     // Add these event listeners
@@ -110,9 +113,19 @@ async function createWindow() {
     }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     console.log('App is ready');
 
+    try {
+        const storedTokens = await authHandler.getStoredTokens();
+        console.log('Stored tokens:', storedTokens);
+        if (storedTokens?.access_token) {
+            console.log('Found stored credentials, validating with server...');
+            await authHandler.validateWithServer(storedTokens.access_token);
+        }
+    } catch (error) {
+        console.error('Error validating stored credentials:', error);
+    }
     // session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     //     callback({
     //         responseHeaders: {
@@ -219,6 +232,11 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+        window.webContents.send('app-reset');
+    });
+
+    // Your existing code
     if (process.platform !== 'darwin') {
         app.quit();
     }
