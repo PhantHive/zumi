@@ -19,6 +19,17 @@ _Hi! I'm Zumi, the kawaii music maid at your service. I will load your music and
 ### Features:
 
 - Play music. (obviously) 🎃
+- Simplify your upload to server
+
+![img_2.png](img_2.png)
+
+- Dynamic scrollbar light mode based on the album cover. 🌈
+
+![img_3.png](img_3.png)
+
+- Custom toolbar to control the music without opening the app. 🌸
+
+![img_4.png](img_4.png)
 
 ### Technologies:
 
@@ -31,12 +42,13 @@ AND THAT'S IT! 🌈✨
 
 ### What's next (dream goal if I HAD MONEY aha):
 
+- Tailor the music to the user's taste thanks to Zumi assistant. 🌸
 - I would definitely add a lyrics detector to check if the lyrics are E.T.H.I.C.A.L or not before adding them to the database.
 - If we add real human-made music, I would add multiple crawlers to check public information about the artist and the song to make sure it's E.T.H.I.C.A.L. (This include video analysis, lyrics analysis, and much more) (THIS REQUIRES A LOT OF MONEY, so it's just a dream goal :D)
 - I would add a feature to detect the mood of the user and play music that fits the mood. (This requires a lot of data and a lot of money, so it's just a dream goal :D)
 
 Note: let's see how far I will go with this project :) I want at least to make a deployed version for my personal use when I am working on my projects.
 
-Wanna see my other projects? Check my [website][https://phanthive.com]
+Wanna see my other projects? Check my ![website](https://phanthive.com/)
 
 ![img_1.png](img_1.png)
