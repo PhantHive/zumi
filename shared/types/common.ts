@@ -21,6 +21,7 @@ export const GENRES = [
     'Lo-fi Emotional',
     'Inspirational Pop',
     'Ambient Cinematic',
+    'Oriental',
 ] as const;
 
 export type Genre = (typeof GENRES)[number];
