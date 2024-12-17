@@ -49,6 +49,6 @@ AND THAT'S IT! 🌈✨
 
 Note: let's see how far I will go with this project :) I want at least to make a deployed version for my personal use when I am working on my projects.
 
-Wanna see my other projects? Check my ![website](https://phanthive.com/)
+Wanna see my other projects? Check my [website](https://phanthive.com/)
 
 ![img_1.png](img_1.png)
