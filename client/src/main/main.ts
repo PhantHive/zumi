@@ -29,7 +29,7 @@ async function createWindow() {
             nodeIntegration: true,
             contextIsolation: false,
             webSecurity: false,
-            devTools: false,
+            devTools: true,
         },
         icon: path.join(__dirname, '../assets/icon.png'),
     });

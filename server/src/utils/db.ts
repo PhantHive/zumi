@@ -4,12 +4,15 @@ import { DatabaseConfig } from '../types/interfaces.js';
 import { Song } from '../../../shared/types/common.js';
 
 export const GENRES = [
-    'Epic Rap',
+    'Epic',
+    'Rap',
     'K-Pop',
-    'Lo-fi Emotional',
-    'Inspirational Pop',
-    'Ambient Cinematic',
-    'Oriental',
+    'Lo-fi',
+    'Emotional',
+    'Inspirational',
+    'Pop',
+    'Ambient',
+    'Cinematic',
 ] as const;
 
 export type Genre = (typeof GENRES)[number];

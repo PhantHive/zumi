@@ -1,6 +1,6 @@
 /* player.scss */
 .player-container {
-    position: relative;
+    position: fixed;
     bottom: 0;
     width: 100%;
     background: var(--background-dark);
@@ -9,7 +9,6 @@
     flex-direction: column;
     padding: 1rem;
     z-index: 10;
-    height: 30vh;
 }
 
 .progress-section {
@@ -58,7 +57,7 @@
 .player-content {
     display: flex;
     align-items: center;
-    padding: 1rem 5% 2rem;
+    padding: 1rem 5%;
     gap: 2rem;
 }
 

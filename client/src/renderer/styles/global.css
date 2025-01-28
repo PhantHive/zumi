@@ -35,7 +35,7 @@ body::before {
 
 .app-container {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     height: 100vh;
     position: relative;
 }
@@ -48,90 +48,6 @@ body::before {
     transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-sizing: border-box;
 }
-
-/* SCROLL BAR */
-@keyframes bubble {
-    0% {
-        background-position:
-            0 0,
-            50% 50%,
-            100% 100%;
-    }
-    100% {
-        background-position:
-            0 100%,
-            50% 150%,
-            100% 200%;
-    }
-}
-
-@keyframes glow {
-    0%,
-    100% {
-        box-shadow:
-            0 0 10px #ff69b4,
-            0 0 20px #ff69b4,
-            0 0 30px #ff69b4;
-    }
-    50% {
-        box-shadow:
-            0 0 20px #ff69b4,
-            0 0 40px #ff69b4,
-            0 0 60px #ff69b4;
-    }
-}
-
-.main-content::-webkit-scrollbar {
-    width: 16px; /* Increase the width of the scrollbar */
-}
-
-.main-content::-webkit-scrollbar-track {
-    background: #333; /* Darker background for dark mode */
-    border-radius: 10px;
-}
-
-.main-content::-webkit-scrollbar-thumb {
-    background:
-        linear-gradient(180deg, #ff69b4, #fff),
-        radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 20%) 0
-            0 / 10px 10px,
-        radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 20%)
-            50% 50% / 10px 10px,
-        radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 20%)
-            100% 100% / 10px 10px;
-    border-radius: 10px;
-    border: 3px solid #333; /* Match the track background */
-    background-size:
-        100% 100%,
-        10px 10px,
-        10px 10px,
-        10px 10px;
-    animation:
-        bubble 5s linear infinite,
-        glow 2s ease-in-out infinite;
-}
-
-.main-content::-webkit-scrollbar-thumb:hover {
-    background:
-        linear-gradient(180deg, #ff69b4, #fff),
-        radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 20%) 0
-            0 / 10px 10px,
-        radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 20%)
-            50% 50% / 10px 10px,
-        radial-gradient(circle, rgba(255, 255, 255, 0.5) 20%, transparent 20%)
-            100% 100% / 10px 10px;
-    background-size:
-        100% 100%,
-        10px 10px,
-        10px 10px,
-        10px 10px;
-    border-radius: 10px;
-    border: 3px solid #333; /* Match the track background */
-    animation:
-        bubble 5s linear infinite,
-        glow 2s ease-in-out infinite;
-}
-/* SCROLL BAR */
 
 .main-content.sidebar-open {
     margin-left: 20vw; /* Match sidebar width */
