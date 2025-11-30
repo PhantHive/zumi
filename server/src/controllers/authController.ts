@@ -328,97 +328,79 @@ export class AuthController {
             console.log('Token length:', token.length);
             console.log('User data:', userData);
 
-            // Return HTML page with JavaScript to trigger deep link
+            // Return HTML page with clickable button to trigger deep link
             const html = `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redirecting to Zumi...</title>
+    <title>Sign In Successful</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
+            min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            padding: 1rem;
         }
         .container {
             text-align: center;
-            padding: 2rem;
+            max-width: 400px;
         }
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 4px solid white;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 1rem;
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
         }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
         }
-        h1 { margin: 0 0 1rem; font-size: 1.5rem; }
-        p { margin: 0.5rem 0; opacity: 0.9; }
-        .error {
-            display: none;
-            margin-top: 2rem;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
+        p {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            line-height: 1.5;
         }
-        .error.show { display: block; }
-        button {
-            margin-top: 1rem;
-            padding: 0.75rem 1.5rem;
+        .button {
+            display: inline-block;
+            padding: 1rem 2rem;
             background: white;
             color: #667eea;
-            border: none;
-            border-radius: 6px;
-            font-size: 1rem;
+            text-decoration: none;
+            border-radius: 12px;
+            font-size: 1.125rem;
             font-weight: 600;
-            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        button:hover {
-            background: rgba(255, 255, 255, 0.9);
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        .button:active {
+            transform: translateY(0);
+        }
+        .help {
+            margin-top: 2rem;
+            font-size: 0.875rem;
+            opacity: 0.8;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="spinner"></div>
-        <h1>Authentication Successful!</h1>
-        <p>Redirecting you back to the Zumi app...</p>
-        <div class="error" id="error">
-            <p>If you're not automatically redirected:</p>
-            <button onclick="openApp()">Open Zumi App</button>
-        </div>
+        <div class="icon">✅</div>
+        <h1>Sign In Successful!</h1>
+        <p>You've successfully signed in with Google. Tap the button below to return to Zumi.</p>
+        <a href="${deepLink}" class="button">Open Zumi App</a>
+        <p class="help">Make sure Expo Go is installed on your device</p>
     </div>
-    <script>
-        const deepLink = ${JSON.stringify(deepLink)};
-        
-        function openApp() {
-            console.log('Opening deep link:', deepLink);
-            window.location.href = deepLink;
-        }
-        
-        // Attempt to open the deep link immediately
-        console.log('Attempting deep link redirect...');
-        openApp();
-        
-        // Show manual option after 2 seconds if still on this page
-        setTimeout(function() {
-            console.log('Deep link may not have worked, showing manual button');
-            document.getElementById('error').classList.add('show');
-        }, 2000);
-    </script>
 </body>
 </html>
 `;
@@ -433,7 +415,7 @@ export class AuthController {
                     ? error.message
                     : 'Authentication failed';
 
-            // Return error page with deep link to error handler
+            // Return error page with clickable button to return to app
             const errorDeepLink = `zumi://auth-error?message=${encodeURIComponent(errorMessage)}`;
             console.log('Sending error redirect page');
 
@@ -445,57 +427,64 @@ export class AuthController {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Authentication Error</title>
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
+            min-height: 100vh;
             background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
             color: white;
+            padding: 1rem;
         }
         .container {
             text-align: center;
-            padding: 2rem;
             max-width: 400px;
         }
-        h1 { margin: 0 0 1rem; font-size: 1.5rem; }
-        p { margin: 0.5rem 0; opacity: 0.9; }
-        .error-icon {
-            font-size: 3rem;
+        .icon {
+            font-size: 4rem;
             margin-bottom: 1rem;
         }
-        button {
-            margin-top: 1.5rem;
-            padding: 0.75rem 1.5rem;
+        h1 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        p {
+            font-size: 1rem;
+            opacity: 0.9;
+            margin-bottom: 2rem;
+            line-height: 1.5;
+        }
+        .button {
+            display: inline-block;
+            padding: 1rem 2rem;
             background: white;
             color: #f5576c;
-            border: none;
-            border-radius: 6px;
-            font-size: 1rem;
+            text-decoration: none;
+            border-radius: 12px;
+            font-size: 1.125rem;
             font-weight: 600;
-            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        button:hover {
-            background: rgba(255, 255, 255, 0.9);
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        .button:active {
+            transform: translateY(0);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="error-icon">⚠️</div>
+        <div class="icon">⚠️</div>
         <h1>Authentication Failed</h1>
         <p>${errorMessage}</p>
-        <button onclick="window.location.href=${JSON.stringify(errorDeepLink)}">Return to App</button>
+        <a href="${errorDeepLink}" class="button">Return to App</a>
     </div>
-    <script>
-        // Auto-redirect after 3 seconds
-        setTimeout(function() {
-            window.location.href = ${JSON.stringify(errorDeepLink)};
-        }, 3000);
-    </script>
 </body>
 </html>
 `;
