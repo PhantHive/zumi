@@ -130,9 +130,12 @@ export class AuthController {
             stateStore.set(state, 'pending', 10);
 
             const clientId = process.env.GOOGLE_CLIENT_ID;
-            const vpsIp = process.env.VPS_IP;
-            const apiPort = process.env.API_PORT;
-            const redirectUri = `http://${vpsIp}:${apiPort}/api/auth/google/callback`;
+
+            // Use BACKEND_URL if available (for domain-based setup), otherwise fall back to IP
+            const backendUrl =
+                process.env.BACKEND_URL ||
+                `http://${process.env.VPS_IP}:${process.env.API_PORT}`;
+            const redirectUri = `${backendUrl}/api/auth/google/callback`;
 
             if (!clientId) {
                 throw new Error('GOOGLE_CLIENT_ID not configured');
@@ -187,9 +190,12 @@ export class AuthController {
             // Exchange code for access token
             const clientId = process.env.GOOGLE_CLIENT_ID;
             const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-            const vpsIp = process.env.VPS_IP;
-            const apiPort = process.env.API_PORT;
-            const redirectUri = `http://${vpsIp}:${apiPort}/api/auth/google/callback`;
+
+            // Use BACKEND_URL if available (for domain-based setup), otherwise fall back to IP
+            const backendUrl =
+                process.env.BACKEND_URL ||
+                `http://${process.env.VPS_IP}:${process.env.API_PORT}`;
+            const redirectUri = `${backendUrl}/api/auth/google/callback`;
 
             if (!clientId || !clientSecret) {
                 throw new Error('Google OAuth credentials not configured');
