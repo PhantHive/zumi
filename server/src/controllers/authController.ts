@@ -166,26 +166,42 @@ export class AuthController {
      * GET /api/auth/google/callback
      */
     async handleOAuthCallback(req: Request, res: Response): Promise<void> {
+        console.log('=== OAuth Callback Received ===');
+        console.log('Query params:', req.query);
+
         try {
             const { code, state } = req.query;
 
             // Validate state parameter
             if (!state || typeof state !== 'string') {
+                console.error(
+                    'State validation failed: missing or invalid state',
+                );
                 throw new Error('Missing state parameter');
             }
 
             const storedState = stateStore.get(state);
             if (!storedState) {
+                console.error(
+                    'State validation failed: state not found in store',
+                );
                 throw new Error('Invalid or expired state parameter');
             }
+
+            console.log('State validated successfully');
 
             // Delete state after verification (one-time use)
             stateStore.delete(state);
 
             // Validate code parameter
             if (!code || typeof code !== 'string') {
+                console.error(
+                    'Code validation failed: missing authorization code',
+                );
                 throw new Error('Missing authorization code');
             }
+
+            console.log('Authorization code received');
 
             // Exchange code for access token
             const clientId = process.env.GOOGLE_CLIENT_ID;
@@ -197,9 +213,13 @@ export class AuthController {
                 `http://${process.env.VPS_IP}:${process.env.API_PORT}`;
             const redirectUri = `${backendUrl}/api/auth/google/callback`;
 
+            console.log('Using redirect URI:', redirectUri);
+
             if (!clientId || !clientSecret) {
                 throw new Error('Google OAuth credentials not configured');
             }
+
+            console.log('Exchanging code for access token...');
 
             const tokenResponse = await fetch(
                 'https://oauth2.googleapis.com/token',
@@ -227,7 +247,11 @@ export class AuthController {
             const tokenData =
                 (await tokenResponse.json()) as GoogleTokenResponse;
 
+            console.log('Access token received successfully');
+
             // Get user info using access token
+            console.log('Fetching user info from Google...');
+
             const userInfoResponse = await fetch(
                 'https://www.googleapis.com/oauth2/v2/userinfo',
                 {
@@ -239,15 +263,21 @@ export class AuthController {
             );
 
             if (!userInfoResponse.ok) {
+                console.error('Failed to fetch user info from Google');
                 throw new Error('Failed to get user info from Google');
             }
 
             const userInfo = (await userInfoResponse.json()) as GoogleUserInfo;
+            console.log('User info received:', {
+                email: userInfo.email,
+                name: userInfo.name,
+            });
 
             // Find or create user
             let user = await User.findByGoogleId(userInfo.id);
 
             if (!user) {
+                console.log('User not found, creating new user...');
                 const userData: CreateUserDTO = {
                     googleId: userInfo.id,
                     email: userInfo.email,
@@ -257,6 +287,8 @@ export class AuthController {
 
                 user = await User.createWithGoogle(userData);
                 console.log('Created new user:', user.id);
+            } else {
+                console.log('Existing user found:', user.id);
             }
 
             if (!process.env.JWT_SECRET) {
@@ -270,6 +302,8 @@ export class AuthController {
                 { expiresIn: '7d' },
             );
 
+            console.log('JWT token generated for user:', user.id);
+
             // Prepare user data for mobile app
             const userData = JSON.stringify({
                 id: user.id,
@@ -280,16 +314,23 @@ export class AuthController {
 
             // Redirect to mobile app with token and user data
             const deepLink = `zumi://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
+
+            console.log('=== Redirecting to mobile app ===');
+            console.log('Deep link scheme: zumi://auth-success');
+            console.log('Token length:', token.length);
+            console.log('User data:', userData);
+
             res.redirect(deepLink);
         } catch (error) {
-            console.error('OAuth callback error:', error);
+            console.error('=== OAuth callback error ===');
+            console.error('Error details:', error);
             const errorMessage =
                 error instanceof Error
                     ? error.message
                     : 'Authentication failed';
-            res.redirect(
-                `zumi://auth-error?message=${encodeURIComponent(errorMessage)}`,
-            );
+            const errorDeepLink = `zumi://auth-error?message=${encodeURIComponent(errorMessage)}`;
+            console.log('Redirecting to error deep link:', errorDeepLink);
+            res.redirect(errorDeepLink);
         }
     }
 }
