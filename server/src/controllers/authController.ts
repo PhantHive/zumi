@@ -119,17 +119,21 @@ export class AuthController {
 
     /**
      * Initiates OAuth flow for mobile app
-     * GET /api/auth/google/mobile
+     * GET /api/auth/google/mobile?scheme=zumi
      */
     async initiateMobileOAuth(req: Request, res: Response): Promise<void> {
         console.log('=== Initiating Mobile OAuth Flow ===');
 
         try {
+            // Get scheme from query params, default to 'zumi'
+            const scheme = (req.query.scheme as string) || 'zumi';
+            console.log('Deep link scheme:', scheme);
+
             // Generate random state for CSRF protection
             const state = crypto.randomBytes(32).toString('hex');
 
-            // Store state with 10 minute expiration
-            stateStore.set(state, 'pending', 10);
+            // Store state with scheme and 10 minute expiration
+            stateStore.set(state, 'pending', 10, scheme);
 
             const clientId = process.env.GOOGLE_CLIENT_ID;
 
@@ -163,8 +167,9 @@ export class AuthController {
             res.redirect(googleAuthUrl.toString());
         } catch (error) {
             console.error('Error initiating OAuth:', error);
+            const scheme = (req.query.scheme as string) || 'zumi';
             res.redirect(
-                `zumi://auth-error?message=${encodeURIComponent('Failed to initiate authentication')}`,
+                `${scheme}://auth-error?message=${encodeURIComponent('Failed to initiate authentication')}`,
             );
         }
     }
@@ -320,11 +325,15 @@ export class AuthController {
                 picture: user.picture,
             });
 
-            // Build deep link for mobile app
-            const deepLink = `zumi://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
+            // Retrieve the stored scheme from state
+            const scheme = storedState.scheme || 'zumi';
+            console.log('Using deep link scheme:', scheme);
+
+            // Build deep link for mobile app with dynamic scheme
+            const deepLink = `${scheme}://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
 
             console.log('=== Sending HTML redirect page ===');
-            console.log('Deep link scheme: zumi://auth-success');
+            console.log('Deep link:', deepLink);
             console.log('Token length:', token.length);
             console.log('User data:', userData);
 
@@ -415,10 +424,12 @@ export class AuthController {
                     ? error.message
                     : 'Authentication failed';
 
-            // Return error page with clickable button to return to app
-            const errorDeepLink = `zumi://auth-error?message=${encodeURIComponent(errorMessage)}`;
+            // Use default scheme for error if state lookup failed
+            const errorScheme = 'zumi';
+            const errorDeepLink = `${errorScheme}://auth-error?message=${encodeURIComponent(errorMessage)}`;
             console.log('Sending error redirect page');
 
+            // Return error page with clickable button to return to app
             const errorHtml = `
 <!DOCTYPE html>
 <html>

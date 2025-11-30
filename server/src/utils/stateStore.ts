@@ -3,21 +3,27 @@
 
 interface StateData {
     value: string;
+    scheme: string;
     expiresAt: number;
 }
 
 class StateStore {
     private store: Map<string, StateData> = new Map();
 
-    set(key: string, value: string, ttlMinutes: number = 10): void {
+    set(
+        key: string,
+        value: string,
+        ttlMinutes: number = 10,
+        scheme: string = 'zumi',
+    ): void {
         const expiresAt = Date.now() + ttlMinutes * 60 * 1000;
-        this.store.set(key, { value, expiresAt });
+        this.store.set(key, { value, scheme, expiresAt });
 
         // Clean up expired entries periodically
         this.cleanup();
     }
 
-    get(key: string): string | null {
+    get(key: string): StateData | null {
         const data = this.store.get(key);
 
         if (!data) {
@@ -30,7 +36,7 @@ class StateStore {
             return null;
         }
 
-        return data.value;
+        return data;
     }
 
     delete(key: string): void {
