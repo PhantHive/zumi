@@ -14,9 +14,18 @@ interface GoogleAuthRequest extends Request {
 const router = Router();
 const authController = new AuthController();
 
-// Public route - no auth required
+// Public routes - no auth required
 router.post('/google', (req: Request, res: Response) => {
     authController.authenticate(req as GoogleAuthRequest, res);
+});
+
+// Mobile OAuth flow routes
+router.get('/google/mobile', (req: Request, res: Response) => {
+    authController.initiateMobileOAuth(req, res);
+});
+
+router.get('/google/callback', (req: Request, res: Response) => {
+    authController.handleOAuthCallback(req, res);
 });
 
 // Protected routes - auth required
