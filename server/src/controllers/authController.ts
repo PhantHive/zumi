@@ -122,6 +122,8 @@ export class AuthController {
      * GET /api/auth/google/mobile
      */
     async initiateMobileOAuth(req: Request, res: Response): Promise<void> {
+        console.log('=== Initiating Mobile OAuth Flow ===');
+
         try {
             // Generate random state for CSRF protection
             const state = crypto.randomBytes(32).toString('hex');
@@ -137,6 +139,10 @@ export class AuthController {
                 `http://${process.env.VPS_IP}:${process.env.API_PORT}`;
             const redirectUri = `${backendUrl}/api/auth/google/callback`;
 
+            console.log('Backend URL:', backendUrl);
+            console.log('Redirect URI being sent to Google:', redirectUri);
+            console.log('Generated state:', state);
+
             if (!clientId) {
                 throw new Error('GOOGLE_CLIENT_ID not configured');
             }
@@ -150,6 +156,8 @@ export class AuthController {
             googleAuthUrl.searchParams.append('response_type', 'code');
             googleAuthUrl.searchParams.append('scope', 'openid profile email');
             googleAuthUrl.searchParams.append('state', state);
+
+            console.log('Redirecting user to Google OAuth URL');
 
             // Redirect user to Google OAuth
             res.redirect(googleAuthUrl.toString());
@@ -312,15 +320,111 @@ export class AuthController {
                 picture: user.picture,
             });
 
-            // Redirect to mobile app with token and user data
+            // Build deep link for mobile app
             const deepLink = `zumi://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
 
-            console.log('=== Redirecting to mobile app ===');
+            console.log('=== Sending HTML redirect page ===');
             console.log('Deep link scheme: zumi://auth-success');
             console.log('Token length:', token.length);
             console.log('User data:', userData);
 
-            res.redirect(deepLink);
+            // Return HTML page with JavaScript to trigger deep link
+            const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redirecting to Zumi...</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 4px solid white;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h1 { margin: 0 0 1rem; font-size: 1.5rem; }
+        p { margin: 0.5rem 0; opacity: 0.9; }
+        .error {
+            display: none;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+        }
+        .error.show { display: block; }
+        button {
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            background: rgba(255, 255, 255, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="spinner"></div>
+        <h1>Authentication Successful!</h1>
+        <p>Redirecting you back to the Zumi app...</p>
+        <div class="error" id="error">
+            <p>If you're not automatically redirected:</p>
+            <button onclick="openApp()">Open Zumi App</button>
+        </div>
+    </div>
+    <script>
+        const deepLink = ${JSON.stringify(deepLink)};
+        
+        function openApp() {
+            console.log('Opening deep link:', deepLink);
+            window.location.href = deepLink;
+        }
+        
+        // Attempt to open the deep link immediately
+        console.log('Attempting deep link redirect...');
+        openApp();
+        
+        // Show manual option after 2 seconds if still on this page
+        setTimeout(function() {
+            console.log('Deep link may not have worked, showing manual button');
+            document.getElementById('error').classList.add('show');
+        }, 2000);
+    </script>
+</body>
+</html>
+`;
+
+            res.setHeader('Content-Type', 'text/html');
+            res.send(html);
         } catch (error) {
             console.error('=== OAuth callback error ===');
             console.error('Error details:', error);
@@ -328,9 +432,76 @@ export class AuthController {
                 error instanceof Error
                     ? error.message
                     : 'Authentication failed';
+
+            // Return error page with deep link to error handler
             const errorDeepLink = `zumi://auth-error?message=${encodeURIComponent(errorMessage)}`;
-            console.log('Redirecting to error deep link:', errorDeepLink);
-            res.redirect(errorDeepLink);
+            console.log('Sending error redirect page');
+
+            const errorHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Error</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 400px;
+        }
+        h1 { margin: 0 0 1rem; font-size: 1.5rem; }
+        p { margin: 0.5rem 0; opacity: 0.9; }
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            margin-top: 1.5rem;
+            padding: 0.75rem 1.5rem;
+            background: white;
+            color: #f5576c;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button:hover {
+            background: rgba(255, 255, 255, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">⚠️</div>
+        <h1>Authentication Failed</h1>
+        <p>${errorMessage}</p>
+        <button onclick="window.location.href=${JSON.stringify(errorDeepLink)}">Return to App</button>
+    </div>
+    <script>
+        // Auto-redirect after 3 seconds
+        setTimeout(function() {
+            window.location.href = ${JSON.stringify(errorDeepLink)};
+        }, 3000);
+    </script>
+</body>
+</html>
+`;
+
+            res.setHeader('Content-Type', 'text/html');
+            res.status(400).send(errorHtml);
         }
     }
 }
