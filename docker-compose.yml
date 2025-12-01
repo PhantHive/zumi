@@ -7,6 +7,7 @@ services:
         volumes:
             - ./uploads:/app/uploads
             - ./data:/app/data
+            - ./database:/app/database
         environment:
             - NODE_ENV=production
         restart: unless-stopped

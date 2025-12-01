@@ -11,8 +11,8 @@ COPY dist/ ./dist/
 COPY shared/ ./shared/
 
 # Create necessary directories with correct permissions
-RUN mkdir -p /app/uploads/thumbnails /app/data && \
-    chmod -R 775 /app/uploads /app/data
+RUN mkdir -p /app/uploads/thumbnails /app/data /app/database && \
+    chmod -R 775 /app/uploads /app/data /app/database
 
 EXPOSE ${PORT}
 
