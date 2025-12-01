@@ -27,11 +27,15 @@ export interface Album {
 }
 
 export const GENRES = [
-    'Epic Rap',
+    'Epic',
+    'Rap',
     'K-Pop',
-    'Lo-fi Emotional',
-    'Inspirational Pop',
-    'Ambient Cinematic',
+    'Lo-fi',
+    'Emotional',
+    'Inspirational',
+    'Pop',
+    'Ambient',
+    'Cinematic',
 ] as const;
 
 export type Genre = (typeof GENRES)[number];
