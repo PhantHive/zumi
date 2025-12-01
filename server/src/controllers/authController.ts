@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt';
 import User, { IUser, CreateUserDTO } from '../models/User.js';
 import { stateStore } from '../utils/stateStore.js';
 import crypto from 'crypto';
@@ -544,6 +545,123 @@ export class AuthController {
 
             res.setHeader('Content-Type', 'text/html');
             res.status(400).send(errorHtml);
+        }
+    }
+
+    /**
+     * Set/Update PIN for user
+     * POST /api/auth/profile/pin
+     * Body: { pinHash: string } - Client-side SHA256 hash
+     */
+    async setPin(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const { pinHash } = req.body;
+
+            if (!pinHash || typeof pinHash !== 'string') {
+                res.status(400).json({ error: 'PIN hash is required' });
+                return;
+            }
+
+            // Hash the client-provided hash again on server for double security
+            const saltRounds = 10;
+            const serverHash = await bcrypt.hash(pinHash, saltRounds);
+
+            // Update user's PIN hash
+            const user = await User.findByIdAndUpdate(
+                req.user.id,
+                { pinHash: serverHash },
+                { new: true },
+            );
+
+            if (!user) {
+                res.status(404).json({ error: 'User not found' });
+                return;
+            }
+
+            console.log(`PIN set for user: ${user.id}`);
+            res.json({
+                success: true,
+                message: 'PIN set successfully',
+                hasPinSet: true,
+            });
+        } catch (error) {
+            console.error('Error setting PIN:', error);
+            res.status(500).json({ error: 'Failed to set PIN' });
+        }
+    }
+
+    /**
+     * Verify PIN against stored hash
+     * POST /api/auth/profile/pin/verify
+     * Body: { pinHash: string } - Client-side SHA256 hash
+     */
+    async verifyPin(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const { pinHash } = req.body;
+
+            if (!pinHash || typeof pinHash !== 'string') {
+                res.status(400).json({ error: 'PIN hash is required' });
+                return;
+            }
+
+            const user = await User.findById(req.user.id);
+
+            if (!user) {
+                res.status(404).json({ error: 'User not found' });
+                return;
+            }
+
+            if (!user.pinHash) {
+                res.status(404).json({
+                    error: 'No PIN set for this user',
+                    valid: false,
+                });
+                return;
+            }
+
+            // Compare the client hash with the stored server hash
+            const isValid = await bcrypt.compare(pinHash, user.pinHash);
+
+            console.log(
+                `PIN verification for user ${user.id}: ${isValid ? 'success' : 'failed'}`,
+            );
+
+            res.json({
+                valid: isValid,
+                message: isValid ? 'PIN verified successfully' : 'Invalid PIN',
+            });
+        } catch (error) {
+            console.error('Error verifying PIN:', error);
+            res.status(500).json({ error: 'Failed to verify PIN' });
+        }
+    }
+
+    /**
+     * Delete/Remove PIN from user profile
+     * DELETE /api/auth/profile/pin
+     */
+    async deletePin(req: AuthenticatedRequest, res: Response): Promise<void> {
+        try {
+            const user = await User.findByIdAndUpdate(
+                req.user.id,
+                { pinHash: null },
+                { new: true },
+            );
+
+            if (!user) {
+                res.status(404).json({ error: 'User not found' });
+                return;
+            }
+
+            console.log(`PIN removed for user: ${user.id}`);
+            res.json({
+                success: true,
+                message: 'PIN removed successfully',
+                hasPinSet: false,
+            });
+        } catch (error) {
+            console.error('Error deleting PIN:', error);
+            res.status(500).json({ error: 'Failed to delete PIN' });
         }
     }
 }

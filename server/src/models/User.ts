@@ -9,6 +9,7 @@ export interface IUser extends BaseDocument {
     name: string;
     googleId: string;
     picture?: string;
+    pinHash?: string; // Server-side PIN hash for enhanced security
     likedSongs: number[]; // Array of SQLite song IDs
     playlists: {
         name: string;
@@ -38,6 +39,7 @@ const userSchema = new Schema<IUser>(
         name: { type: String, required: true },
         googleId: { type: String, required: true, unique: true },
         picture: String,
+        pinHash: { type: String }, // Server-side PIN hash for enhanced security
         likedSongs: { type: [Number], default: [] }, // Initialize likedSongs array
         playlists: [
             {

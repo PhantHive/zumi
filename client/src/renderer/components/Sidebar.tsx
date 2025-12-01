@@ -1,3 +1,4 @@
+declare module 'jsmediatags';
 import React, { useRef, useState, useEffect } from 'react';
 import { apiClient } from '../utils/apiClient';
 import { GENRES, Genre } from '../../../../shared/types/common';
