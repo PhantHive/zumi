@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import songRoutes, { staticPaths } from './routes/songs.js';
 import connectDB from './utils/mongoose.js';
@@ -40,9 +41,34 @@ app.use(express.static(path.join(__dirname, '../../public')));
 app.use('/uploads', express.static(path.join(staticPaths.uploads)));
 app.use('/data', express.static(staticPaths.data));
 
+// Serve mobile releases (APK files)
+app.use('/mobile', express.static('/opt/zumi-mobile/releases'));
+
 // Routes
 app.use('/api/auth', authRoutes); // Auth routes should be public
 app.use('/api/songs', auth, songRoutes); // Protect song routes with auth middleware
+
+// Mobile version check endpoint
+app.get('/api/mobile/version', (req, res) => {
+    try {
+        const versionFile = '/opt/zumi-mobile/releases/version.json';
+        if (fs.existsSync(versionFile)) {
+            const versionData = fs.readFileSync(versionFile, 'utf8');
+            res.json(JSON.parse(versionData));
+        } else {
+            res.status(404).json({
+                error: 'No version information available',
+                message: 'Update system not initialized',
+            });
+        }
+    } catch (error) {
+        console.error('Error reading version file:', error);
+        res.status(500).json({
+            error: 'Failed to check version',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
 
 // Start the server
 app.listen(PORT, () => {
