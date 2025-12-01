@@ -127,13 +127,15 @@ export class AuthController {
         try {
             // Get scheme from query params, default to 'zumi'
             const scheme = (req.query.scheme as string) || 'zumi';
-            console.log('Deep link scheme:', scheme);
+            console.log('Deep link scheme received from mobile:', scheme);
 
             // Generate random state for CSRF protection
             const state = crypto.randomBytes(32).toString('hex');
 
             // Store state with scheme and 10 minute expiration
-            stateStore.set(state, 'pending', 10, scheme);
+            // Pass scheme as the 5th parameter
+            stateStore.set(state, 'pending', 10, scheme, scheme);
+            console.log('Stored state with scheme:', scheme);
 
             const clientId = process.env.GOOGLE_CLIENT_ID;
 

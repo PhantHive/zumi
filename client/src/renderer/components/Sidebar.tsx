@@ -3,6 +3,7 @@ import { apiClient } from '../utils/apiClient';
 import { GENRES, Genre } from '../../../../shared/types/common';
 import '../styles/sidebar.css';
 import BurgerButton from './BurgerButton';
+import jsmediatags from 'jsmediatags';
 
 interface SidebarProps {
     onSongUpload: () => void;
@@ -43,6 +44,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     const [showAlbumSuggestions, setShowAlbumSuggestions] = useState(false);
     const [showArtistSuggestions, setShowArtistSuggestions] = useState(false);
     const [userName, setUserName] = useState('');
+    const [extractedThumbnail, setExtractedThumbnail] = useState<File | null>(
+        null,
+    );
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -63,11 +67,94 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
         fetchSuggestions();
     }, []);
 
+    const handleAudioFileChange = async (
+        event: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        // Read metadata from the audio file
+        jsmediatags.read(file, {
+            onSuccess: (tag) => {
+                const { tags } = tag;
+
+                // Auto-fill form fields with metadata
+                if (tags.title && !songTitle) {
+                    setSongTitle(tags.title);
+                }
+                if (tags.artist && !artistName) {
+                    setArtistName(tags.artist);
+                }
+                if (tags.album && !albumName) {
+                    setAlbumName(tags.album);
+                }
+                if (tags.year && !year) {
+                    setYear(tags.year.toString());
+                }
+                if (tags.genre && !genre) {
+                    // Try to match the genre from the file with available GENRES
+                    const fileGenre = tags.genre;
+                    const matchedGenre = GENRES.find(
+                        (g) => g.toLowerCase() === fileGenre.toLowerCase(),
+                    );
+                    if (matchedGenre) {
+                        setGenre(matchedGenre as Genre);
+                    }
+                }
+                if (tags.lyrics && !lyrics) {
+                    const lyricsText = tags.lyrics.lyrics || tags.lyrics;
+                    if (typeof lyricsText === 'string') {
+                        setLyrics(lyricsText);
+                    }
+                }
+
+                // Extract embedded thumbnail/album art
+                if (tags.picture) {
+                    const picture = tags.picture;
+                    const { data, format } = picture;
+
+                    // Convert the image data to a Blob
+                    const byteArray = new Uint8Array(data);
+                    const blob = new Blob([byteArray], { type: format });
+
+                    // Create a File object from the Blob
+                    const imageFile = new File([blob], 'cover.jpg', {
+                        type: format,
+                    });
+
+                    // Store the extracted thumbnail
+                    setExtractedThumbnail(imageFile);
+
+                    // If no thumbnail is selected, use the extracted one
+                    if (!thumbnailInputRef.current?.files?.[0]) {
+                        // Create a new DataTransfer to set the file input
+                        const dataTransfer = new DataTransfer();
+                        dataTransfer.items.add(imageFile);
+                        if (thumbnailInputRef.current) {
+                            thumbnailInputRef.current.files =
+                                dataTransfer.files;
+                        }
+                    }
+
+                    console.log('Extracted thumbnail from audio file');
+                }
+            },
+            onError: (error) => {
+                console.error('Error reading audio metadata:', error);
+                // If metadata reading fails, fallback to filename
+                if (!songTitle) {
+                    setSongTitle(file.name.replace(/\.[^/.]+$/, ''));
+                }
+            },
+        });
+    };
+
     const handleUpload = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
         const audioFile = audioInputRef.current?.files?.[0];
-        const thumbnailFile = thumbnailInputRef.current?.files?.[0];
+        const thumbnailFile =
+            thumbnailInputRef.current?.files?.[0] || extractedThumbnail;
 
         if (!audioFile) return;
 
@@ -109,6 +196,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
             setTags('');
             setLyrics('');
             setVisibility('public');
+            setExtractedThumbnail(null);
         } catch (error) {
             console.error('Upload error:', error);
         } finally {
@@ -179,6 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                         accept="audio/*"
                         style={{ marginBottom: '10px' }}
                         disabled={isUploading}
+                        onChange={handleAudioFileChange}
                     />
                     <input
                         ref={thumbnailInputRef}
@@ -190,7 +279,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                     />
                     <label htmlFor="file-upload-audio">Choose audio file</label>
                     <label htmlFor="file-upload-thumbnail">
-                        Choose thumbnail
+                        Choose thumbnail{' '}
+                        {extractedThumbnail && '(auto-detected)'}
                     </label>
 
                     {/* Song Title */}
