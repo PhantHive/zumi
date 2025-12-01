@@ -158,6 +158,7 @@
         "lucide-react": "^0.468.0",
         "mongoose": "^8.8.4",
         "multer": "^1.4.5-lts.1",
+        "node-vibrant": "^4.0.3",
         "path-browserify": "^1.0.1",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",

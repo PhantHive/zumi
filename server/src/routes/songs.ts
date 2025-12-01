@@ -6,6 +6,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { extractColors } from '../utils/colorExtractor.js';
 
 const router = Router();
 const isDev = process.env.NODE_ENV === 'development';
@@ -83,6 +84,27 @@ router.get('/thumbnails/:filename', (req, res) => {
             }
         }
     });
+});
+
+router.get('/thumbnails/:filename/colors', async (req, res) => {
+    try {
+        const { filename } = req.params;
+        const paths = isDev
+            ? UPLOAD_PATHS.development
+            : UPLOAD_PATHS.production;
+        const filePath = path.join(paths.thumbnails, filename);
+
+        if (!fs.existsSync(filePath)) {
+            res.status(404).json({ error: 'Thumbnail not found' });
+            return;
+        }
+
+        const colors = await extractColors(filePath, filename);
+        res.json(colors);
+    } catch (error) {
+        console.error('Error extracting colors:', error);
+        res.status(500).json({ error: 'Failed to extract colors' });
+    }
 });
 
 export const staticPaths = {
