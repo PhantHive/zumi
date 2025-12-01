@@ -1,4 +1,4 @@
-import * as Vibrant from 'node-vibrant';
+import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 
@@ -60,6 +60,39 @@ const saveCache = (isDev: boolean): void => {
 const isDev = process.env.NODE_ENV === 'development';
 loadCache(isDev);
 
+// Helper function to calculate color luminance
+const getLuminance = (r: number, g: number, b: number): number => {
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+// Helper function to calculate color saturation
+const getSaturation = (r: number, g: number, b: number): number => {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    return max === 0 ? 0 : (max - min) / max;
+};
+
+// Helper function to adjust color brightness
+const adjustBrightness = (rgb: number[], factor: number): number[] => {
+    return rgb.map((c) => Math.min(255, Math.max(0, Math.round(c * factor))));
+};
+
+// Helper function to adjust color saturation
+const adjustSaturation = (rgb: number[], factor: number): number[] => {
+    const [r, g, b] = rgb;
+    const gray = 0.2989 * r + 0.587 * g + 0.114 * b;
+    return [
+        Math.min(255, Math.max(0, Math.round(gray + (r - gray) * factor))),
+        Math.min(255, Math.max(0, Math.round(gray + (g - gray) * factor))),
+        Math.min(255, Math.max(0, Math.round(gray + (b - gray) * factor))),
+    ];
+};
+
+// Convert RGB array to hex string
+const rgbToHex = (rgb: number[]): string => {
+    return `#${rgb.map((x) => Math.round(x).toString(16).padStart(2, '0')).join('')}`;
+};
+
 export const extractColors = async (
     imagePath: string,
     filename: string,
@@ -70,34 +103,70 @@ export const extractColors = async (
     }
 
     try {
-        // Extract color palette using Vibrant
-        const palette = await Vibrant.from(imagePath).getPalette();
+        // Resize image to 64x64 for faster processing and get raw pixel data
+        const { data } = await sharp(imagePath)
+            .resize(64, 64, { fit: 'cover' })
+            .raw()
+            .toBuffer({ resolveWithObject: true });
 
-        // Convert to hex colors with fallbacks
-        const toHex = (rgb: number[] | undefined): string => {
-            if (!rgb) return '#1a1a2e'; // Default dark background
-            return `#${rgb.map((x) => Math.round(x).toString(16).padStart(2, '0')).join('')}`;
-        };
+        // Extract color palette by sampling pixels
+        const pixels: Array<[number, number, number]> = [];
+        for (let i = 0; i < data.length; i += 4) {
+            pixels.push([data[i], data[i + 1], data[i + 2]]);
+        }
 
+        // Find dominant colors by clustering
+        const dominantColor = pixels.reduce(
+            (acc, pixel) => {
+                return [
+                    acc[0] + pixel[0],
+                    acc[1] + pixel[1],
+                    acc[2] + pixel[2],
+                ];
+            },
+            [0, 0, 0],
+        );
+
+        const avgColor: [number, number, number] = [
+            Math.round(dominantColor[0] / pixels.length),
+            Math.round(dominantColor[1] / pixels.length),
+            Math.round(dominantColor[2] / pixels.length),
+        ];
+
+        // Sort pixels by saturation to find vibrant colors
+        const sortedBySaturation = pixels
+            .filter((p) => {
+                const lum = getLuminance(p[0], p[1], p[2]);
+                return lum > 20 && lum < 235; // Exclude very dark/light
+            })
+            .sort((a, b) => {
+                return (
+                    getSaturation(b[0], b[1], b[2]) -
+                    getSaturation(a[0], a[1], a[2])
+                );
+            });
+
+        const vibrantColor = sortedBySaturation[0] || avgColor;
+
+        // Sort pixels by luminance to find dark/light colors
+        const sortedByLuminance = pixels.sort((a, b) => {
+            return (
+                getLuminance(a[0], a[1], a[2]) - getLuminance(b[0], b[1], b[2])
+            );
+        });
+
+        const darkColor = sortedByLuminance[0] || avgColor;
+        const lightColor =
+            sortedByLuminance[sortedByLuminance.length - 1] || avgColor;
+
+        // Generate color palette
         const colorPalette: ColorPalette = {
-            background:
-                toHex(palette.DarkMuted?.rgb) ||
-                toHex(palette.Muted?.rgb) ||
-                '#1a1a2e',
-            primary:
-                toHex(palette.Vibrant?.rgb) ||
-                toHex(palette.LightVibrant?.rgb) ||
-                '#6e4f8f',
-            secondary:
-                toHex(palette.DarkVibrant?.rgb) ||
-                toHex(palette.DarkMuted?.rgb) ||
-                '#4a3a6e',
-            detail:
-                toHex(palette.LightVibrant?.rgb) ||
-                toHex(palette.LightMuted?.rgb) ||
-                '#8e6faf',
-            vibrant: toHex(palette.Vibrant?.rgb) || '#9370db',
-            muted: toHex(palette.Muted?.rgb) || '#5a4a6e',
+            background: rgbToHex(adjustBrightness(Array.from(darkColor), 0.8)),
+            primary: rgbToHex(Array.from(vibrantColor)),
+            secondary: rgbToHex(adjustBrightness(Array.from(avgColor), 0.7)),
+            detail: rgbToHex(Array.from(lightColor)),
+            vibrant: rgbToHex(adjustSaturation(Array.from(vibrantColor), 1.2)),
+            muted: rgbToHex(adjustSaturation(Array.from(avgColor), 0.6)),
         };
 
         // Cache the result
