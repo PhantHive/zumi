@@ -326,11 +326,15 @@ export class AuthController {
             });
 
             // Retrieve the stored scheme from state
-            const scheme = storedState.scheme || 'zumi';
+            const scheme = storedState.scheme || 'zumi://auth-success';
             console.log('Using deep link scheme:', scheme);
 
-            // Build deep link for mobile app with dynamic scheme
-            const deepLink = `${scheme}://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
+            // Build deep link for mobile app
+            // If scheme already contains the full path (e.g., exp://192.168.1.148:8081/--/auth-success),
+            // just append query params. Otherwise, build the full URL (for zumi://auth-success)
+            const deepLink = scheme.includes('://')
+                ? `${scheme}?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`
+                : `${scheme}://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
 
             console.log('=== Sending HTML redirect page ===');
             console.log('Deep link:', deepLink);
