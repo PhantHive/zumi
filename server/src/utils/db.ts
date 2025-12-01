@@ -438,7 +438,7 @@ export class DbClient {
 const isDev = process.env.NODE_ENV === 'development';
 const DB_PATH = isDev
     ? path.join(process.cwd(), 'music.db')
-    : path.join(process.env.DATABASE_DIR || '/app/database', 'music.db');
+    : '/app/database/music.db';
 
 console.log('Using database path:', DB_PATH);
 
