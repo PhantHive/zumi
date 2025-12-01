@@ -125,15 +125,19 @@ export class AuthController {
         console.log('=== Initiating Mobile OAuth Flow ===');
 
         try {
-            // Get scheme from query params, default to 'zumi'
-            const scheme = (req.query.scheme as string) || 'zumi';
+            // Get scheme from query params - REQUIRED, no default
+            const scheme = req.query.scheme as string;
+            if (!scheme) {
+                console.error('Error: scheme parameter is required');
+                res.status(400).json({ error: 'scheme parameter is required' });
+                return;
+            }
             console.log('Deep link scheme received from mobile:', scheme);
 
             // Generate random state for CSRF protection
             const state = crypto.randomBytes(32).toString('hex');
 
             // Store state with scheme and 10 minute expiration
-            // Pass scheme as the 5th parameter
             stateStore.set(state, 'pending', 10, scheme, scheme);
             console.log('Stored state with scheme:', scheme);
 
@@ -328,15 +332,18 @@ export class AuthController {
             });
 
             // Retrieve the stored scheme from state
-            const scheme = storedState.scheme || 'zumi://auth-success';
+            const scheme = storedState.scheme;
+            if (!scheme) {
+                console.error('Error: scheme not found in stored state');
+                throw new Error('Scheme not found in session state');
+            }
             console.log('Using deep link scheme:', scheme);
 
-            // Build deep link for mobile app
-            // If scheme already contains the full path (e.g., exp://192.168.1.148:8081/--/auth-success),
-            // just append query params. Otherwise, build the full URL (for zumi://auth-success)
-            const deepLink = scheme.includes('://')
-                ? `${scheme}?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`
-                : `${scheme}://auth-success?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
+            // Build deep link - the scheme already includes everything
+            // Examples:
+            //   exp://192.168.1.148:8081/--/auth-success
+            //   zumi://auth-success
+            const deepLink = `${scheme}?token=${encodeURIComponent(token)}&user=${encodeURIComponent(userData)}`;
 
             console.log('=== Sending HTML redirect page ===');
             console.log('Deep link:', deepLink);
@@ -458,9 +465,10 @@ export class AuthController {
                     ? error.message
                     : 'Authentication failed';
 
-            // Use default scheme for error if state lookup failed
-            const errorScheme = 'zumi';
-            const errorDeepLink = `${errorScheme}://auth-error?message=${encodeURIComponent(errorMessage)}`;
+            // Try to get scheme from query params for error redirect
+            const errorScheme =
+                (req.query.scheme as string) || 'zumi://auth-error';
+            const errorDeepLink = `${errorScheme}?message=${encodeURIComponent(errorMessage)}`;
             console.log('Sending error redirect page');
 
             // Return error page with clickable button to return to app
