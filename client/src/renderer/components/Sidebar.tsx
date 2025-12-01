@@ -23,8 +23,19 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     const thumbnailInputRef = useRef<HTMLInputElement>(null);
     const [albumName, setAlbumName] = useState('');
     const [artistName, setArtistName] = useState('');
+    const [songTitle, setSongTitle] = useState('');
     const [genre, setGenre] = useState<Genre>('K-Pop');
+    const [visibility, setVisibility] = useState<'public' | 'private'>(
+        'public',
+    );
+    const [year, setYear] = useState('');
+    const [bpm, setBpm] = useState('');
+    const [mood, setMood] = useState('');
+    const [language, setLanguage] = useState('');
+    const [tags, setTags] = useState('');
+    const [lyrics, setLyrics] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [suggestions, setSuggestions] = useState<Suggestions>({
         albums: [],
         artists: [],
@@ -62,10 +73,19 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
 
         const formData = new FormData();
         formData.append('audio', audioFile);
-        formData.append('title', audioFile.name.split('.')[0]);
+        formData.append('title', songTitle || audioFile.name.split('.')[0]);
         formData.append('artist', artistName || 'Unknown Artist');
         formData.append('album', albumName || 'Unknown Album');
         formData.append('genre', genre);
+        formData.append('visibility', visibility);
+
+        // Add optional metadata fields
+        if (year) formData.append('year', year);
+        if (bpm) formData.append('bpm', bpm);
+        if (mood) formData.append('mood', mood);
+        if (language) formData.append('language', language);
+        if (tags) formData.append('tags', tags);
+        if (lyrics) formData.append('lyrics', lyrics);
 
         if (thumbnailFile) {
             formData.append('thumbnail', thumbnailFile);
@@ -76,11 +96,19 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
             await apiClient.post('/api/songs', formData);
             onSongUpload();
 
-            // Reset inputs
+            // Reset all inputs
             if (audioInputRef.current) audioInputRef.current.value = '';
             if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+            setSongTitle('');
             setAlbumName('');
             setArtistName('');
+            setYear('');
+            setBpm('');
+            setMood('');
+            setLanguage('');
+            setTags('');
+            setLyrics('');
+            setVisibility('public');
         } catch (error) {
             console.error('Upload error:', error);
         } finally {
@@ -165,6 +193,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                         Choose thumbnail
                     </label>
 
+                    {/* Song Title */}
+                    <input
+                        type="text"
+                        placeholder="Song Title (optional)"
+                        value={songTitle}
+                        onChange={(e) => setSongTitle(e.target.value)}
+                        style={{ marginBottom: '10px' }}
+                        disabled={isUploading}
+                    />
+
+                    {/* Album Name with suggestions */}
                     <div
                         className="input-container"
                         onClick={(e) => e.stopPropagation()}
@@ -207,6 +246,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                             )}
                     </div>
 
+                    {/* Artist Name with suggestions */}
                     <div
                         className="input-container"
                         onClick={(e) => e.stopPropagation()}
@@ -249,6 +289,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                             )}
                     </div>
 
+                    {/* Genre Select */}
                     <select
                         value={genre}
                         onChange={(e) => setGenre(e.target.value as Genre)}
@@ -262,6 +303,101 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                             </option>
                         ))}
                     </select>
+
+                    {/* Visibility Select */}
+                    <select
+                        value={visibility}
+                        onChange={(e) =>
+                            setVisibility(
+                                e.target.value as 'public' | 'private',
+                            )
+                        }
+                        style={{ marginBottom: '10px' }}
+                        disabled={isUploading}
+                        className="visibility-select"
+                    >
+                        <option value="public">Public</option>
+                        <option value="private">Private</option>
+                    </select>
+
+                    {/* Advanced Options Toggle */}
+                    <button
+                        type="button"
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        style={{ marginBottom: '10px' }}
+                        className="advanced-toggle"
+                        disabled={isUploading}
+                    >
+                        {showAdvanced
+                            ? '▼ Hide Advanced Options'
+                            : '▶ Show Advanced Options'}
+                    </button>
+
+                    {/* Advanced Options */}
+                    {showAdvanced && (
+                        <div className="advanced-options">
+                            <input
+                                type="number"
+                                placeholder="Year (e.g., 2023)"
+                                value={year}
+                                onChange={(e) => setYear(e.target.value)}
+                                style={{ marginBottom: '10px' }}
+                                disabled={isUploading}
+                                min="1900"
+                                max="2100"
+                            />
+
+                            <input
+                                type="number"
+                                placeholder="BPM (e.g., 120)"
+                                value={bpm}
+                                onChange={(e) => setBpm(e.target.value)}
+                                style={{ marginBottom: '10px' }}
+                                disabled={isUploading}
+                                min="1"
+                                max="300"
+                            />
+
+                            <input
+                                type="text"
+                                placeholder="Mood (e.g., energetic, chill)"
+                                value={mood}
+                                onChange={(e) => setMood(e.target.value)}
+                                style={{ marginBottom: '10px' }}
+                                disabled={isUploading}
+                            />
+
+                            <input
+                                type="text"
+                                placeholder="Language (e.g., en, ja, ko)"
+                                value={language}
+                                onChange={(e) => setLanguage(e.target.value)}
+                                style={{ marginBottom: '10px' }}
+                                disabled={isUploading}
+                                maxLength={10}
+                            />
+
+                            <input
+                                type="text"
+                                placeholder="Tags (comma-separated: pop, dance, upbeat)"
+                                value={tags}
+                                onChange={(e) => setTags(e.target.value)}
+                                style={{ marginBottom: '10px' }}
+                                disabled={isUploading}
+                            />
+
+                            <textarea
+                                placeholder="Lyrics (optional)"
+                                value={lyrics}
+                                onChange={(e) => setLyrics(e.target.value)}
+                                style={{
+                                    marginBottom: '10px',
+                                    minHeight: '80px',
+                                }}
+                                disabled={isUploading}
+                            />
+                        </div>
+                    )}
 
                     <button type="submit" disabled={isUploading}>
                         {isUploading ? 'Uploading...' : 'Upload'}

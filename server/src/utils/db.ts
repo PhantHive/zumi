@@ -2,6 +2,7 @@ import sqlite3 from 'sqlite3';
 import { Database } from 'sqlite3';
 import { DatabaseConfig } from '../types/interfaces.js';
 import { Song } from '../../../shared/types/common.js';
+import path from 'path';
 
 export const GENRES = [
     'Epic',
@@ -433,4 +434,12 @@ export class DbClient {
     }
 }
 
-export const db = new DbClient({ filename: 'music.db' });
+// Determine database path based on environment
+const isDev = process.env.NODE_ENV === 'development';
+const DB_PATH = isDev
+    ? path.join(process.cwd(), 'music.db')
+    : path.join(process.env.DATA_DIR || '/app/data', 'music.db');
+
+console.log('Using database path:', DB_PATH);
+
+export const db = new DbClient({ filename: DB_PATH });
