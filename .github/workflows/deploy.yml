@@ -71,12 +71,6 @@ jobs:
             mkdir -p /opt/music-server/data
             mkdir -p /opt/music-server/database
             
-            # Backup existing database from container if it exists
-            if docker ps -a | grep -q music-server 2>/dev/null; then
-              echo "Attempting to backup existing database..."
-              docker cp music-server:/app/music.db /opt/music-server/database/music.db 2>/dev/null || echo "No existing database to backup"
-            fi
-            
             # Load and validate API_PORT
             API_PORT=$(grep API_PORT /home/Phearion/Zumi/.env | cut -d '=' -f2 | tr -d '\r\n ')
             
