@@ -3,7 +3,7 @@
 
 interface StateData {
     value: string;
-    scheme: string;
+    deepLinkBase: string;
     expiresAt: number;
 }
 
@@ -14,10 +14,10 @@ class StateStore {
         key: string,
         value: string,
         ttlMinutes: number = 10,
-        scheme: string = 'zumi',
+        deepLinkBase: string = 'zumi://',
     ): void {
         const expiresAt = Date.now() + ttlMinutes * 60 * 1000;
-        this.store.set(key, { value, scheme, expiresAt });
+        this.store.set(key, { value, deepLinkBase, expiresAt });
 
         // Clean up expired entries periodically
         this.cleanup();

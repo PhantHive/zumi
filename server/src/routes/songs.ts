@@ -48,9 +48,14 @@ router.use(auth);
 router.get('/', songController.getAllSongs);
 router.get('/artists', songController.getArtists);
 router.get('/albums', songController.getAlbums);
+router.get('/my-uploads', songController.getMyUploads);
+router.get('/liked', songController.getLikedSongs);
 
 router.get('/:id', songController.getSong);
 router.get('/:id/stream', songController.streamSong);
+router.post('/:id/like', songController.toggleLike);
+router.patch('/:id/visibility', songController.updateVisibility);
+router.delete('/:id', songController.deleteSong);
 router.post(
     '/',
     upload.fields([

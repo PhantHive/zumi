@@ -9,9 +9,10 @@ export interface IUser extends BaseDocument {
     name: string;
     googleId: string;
     picture?: string;
+    likedSongs: number[]; // Array of SQLite song IDs
     playlists: {
         name: string;
-        songs: mongoose.Types.ObjectId[];
+        songs: number[]; // Changed to song IDs instead of ObjectId since songs are in SQLite
     }[];
     preferences: {
         theme: 'light' | 'dark';
@@ -37,10 +38,11 @@ const userSchema = new Schema<IUser>(
         name: { type: String, required: true },
         googleId: { type: String, required: true, unique: true },
         picture: String,
+        likedSongs: { type: [Number], default: [] }, // Initialize likedSongs array
         playlists: [
             {
                 name: { type: String, required: true },
-                songs: [{ type: Schema.Types.ObjectId, ref: 'Song' }],
+                songs: [{ type: Number }], // Changed to song IDs instead of ObjectId since songs are in SQLite
             },
         ],
         preferences: {
@@ -85,6 +87,7 @@ userSchema.statics.createWithGoogle = async function (
             visualizerEnabled: true,
         },
         playlists: [],
+        likedSongs: [], // Initialize likedSongs as an empty array
     });
 };
 
