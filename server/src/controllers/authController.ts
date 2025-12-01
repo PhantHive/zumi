@@ -341,7 +341,7 @@ export class AuthController {
             console.log('Token length:', token.length);
             console.log('User data:', userData);
 
-            // Return HTML page with clickable button to trigger deep link
+            // Return HTML page with automatic redirect and fallback button
             const html = `
 <!DOCTYPE html>
 <html>
@@ -404,16 +404,44 @@ export class AuthController {
             font-size: 0.875rem;
             opacity: 0.8;
         }
+        .loading {
+            font-size: 0.875rem;
+            opacity: 0.7;
+            margin-top: 1rem;
+        }
+        #manual-redirect {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="icon">✅</div>
         <h1>Sign In Successful!</h1>
-        <p>You've successfully signed in with Google. Tap the button below to return to Zumi.</p>
-        <a href="${deepLink}" class="button">Open Zumi App</a>
-        <p class="help">Make sure Expo Go is installed on your device</p>
+        <p class="loading">Redirecting you back to Zumi...</p>
+        <div id="manual-redirect">
+            <p>If you're not redirected automatically, tap the button below:</p>
+            <a href="${deepLink}" class="button">Open Zumi App</a>
+            <p class="help">Make sure the Zumi app or Expo Go is installed on your device</p>
+        </div>
     </div>
+    
+    <script>
+        // Attempt automatic redirect
+        const deepLink = '${deepLink}';
+        
+        console.log('Attempting automatic redirect to:', deepLink);
+        
+        // Try to redirect immediately
+        window.location.href = deepLink;
+        
+        // Fallback: If automatic redirect doesn't work after 2 seconds, show manual button
+        setTimeout(function() {
+            console.log('Automatic redirect may have failed, showing manual button');
+            document.querySelector('.loading').style.display = 'none';
+            document.getElementById('manual-redirect').style.display = 'block';
+        }, 2000);
+    </script>
 </body>
 </html>
 `;
