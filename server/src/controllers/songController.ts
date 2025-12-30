@@ -267,6 +267,71 @@ export class SongController {
         }
     };
 
+    updateSong: RequestHandler = async (req, res) => {
+        try {
+            const authenticatedReq = req as AuthenticatedRequest;
+            const userEmail = authenticatedReq.user.email;
+            const songId = parseInt(req.params.id);
+            const multerReq = req as MulterRequest;
+
+            const isDev = process.env.NODE_ENV === 'development';
+            const baseMusicPath = isDev ? './public/data' : '/app/data';
+            const baseThumbnailPath = isDev
+                ? './public/uploads/thumbnails'
+                : '/app/uploads/thumbnails';
+
+            const updates: any = {};
+
+            // Handle optional audio replacement
+            const audioFile = multerReq.files?.['audio']?.[0];
+            if (audioFile) {
+                // audioFile.path already uses the configured storage destination
+                updates.filepath = path.join(baseMusicPath, audioFile.filename);
+                try {
+                    const duration = await getAudioDurationInSeconds(audioFile.path);
+                    updates.duration = Math.floor(duration);
+                } catch (e) {
+                    console.warn('Failed to determine audio duration:', e);
+                }
+            }
+
+            // Handle optional thumbnail replacement
+            const thumbnail = multerReq.files?.['thumbnail']?.[0];
+            if (thumbnail) {
+                updates.thumbnailUrl = `${thumbnail.filename}`;
+            }
+
+            // Metadata fields
+            if (req.body.title) updates.title = req.body.title;
+            if (req.body.artist) updates.artist = req.body.artist;
+            if (req.body.album) updates.albumId = req.body.album;
+            if (req.body.visibility) updates.visibility = req.body.visibility;
+            if (req.body.year) updates.year = parseInt(req.body.year);
+            if (req.body.bpm) updates.bpm = parseInt(req.body.bpm);
+            if (req.body.mood) updates.mood = req.body.mood;
+            if (req.body.language) updates.language = req.body.language;
+            if (req.body.lyrics) updates.lyrics = req.body.lyrics;
+            if (req.body.genre) updates.genre = req.body.genre;
+            if (req.body.tags) {
+                updates.tags = req.body.tags
+                    .split(',')
+                    .map((t: string) => t.trim())
+                    .filter(Boolean);
+            }
+
+            const updated = await db.updateSong(songId, updates, userEmail);
+            if (!updated) {
+                res.status(404).json({ error: 'Song not found or unauthorized' });
+                return;
+            }
+
+            res.json({ data: updated });
+        } catch (error) {
+            console.error('Error updating song:', error);
+            res.status(500).json({ error: 'Failed to update song' });
+        }
+    };
+
     deleteSong: RequestHandler = async (req, res) => {
         try {
             const authenticatedReq = req as AuthenticatedRequest;

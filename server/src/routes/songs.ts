@@ -66,6 +66,16 @@ router.post(
     songController.createSong,
 );
 
+// Add update route for song metadata and optional file replacements
+router.patch(
+    '/:id',
+    upload.fields([
+        { name: 'audio', maxCount: 1 },
+        { name: 'thumbnail', maxCount: 1 },
+    ]),
+    songController.updateSong,
+);
+
 router.get('/thumbnails/:filename', (req, res) => {
     const { filename } = req.params;
     const paths = isDev ? UPLOAD_PATHS.development : UPLOAD_PATHS.production;

@@ -380,19 +380,6 @@ export class DbClient {
         });
     }
 
-    async incrementPlayCount(id: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.db.run(
-                'UPDATE songs SET playCount = playCount + 1 WHERE id = ?',
-                [id],
-                (err: Error | null) => {
-                    if (err) reject(err);
-                    resolve();
-                },
-            );
-        });
-    }
-
     async deleteSong(id: number, uploaderEmail: string): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -406,30 +393,71 @@ export class DbClient {
         });
     }
 
-    async searchSongs(query: string, userEmail?: string): Promise<Song[]> {
+    async updateSong(
+        id: number,
+        updates: Partial<Omit<Song, 'id' | 'filepath'>> & { filepath?: string; duration?: number },
+        uploaderEmail: string,
+    ): Promise<Song | null> {
+        // Build dynamic SET clause
+        const fields: string[] = [];
+        const params: (string | number | null)[] = [];
+
+        const allowed = [
+            'title',
+            'artist',
+            'duration',
+            'filepath',
+            'albumId',
+            'thumbnailUrl',
+            'genre',
+            'uploadedBy',
+            'visibility',
+            'year',
+            'bpm',
+            'mood',
+            'language',
+            'lyrics',
+            'tags',
+        ];
+
+        for (const key of Object.keys(updates)) {
+            if (!allowed.includes(key)) continue;
+            const val = (updates as any)[key];
+            fields.push(`${key} = ?`);
+            if (key === 'tags' && Array.isArray(val)) params.push((val as string[]).join(', '));
+            else params.push(val ?? null);
+        }
+
+        if (fields.length === 0) {
+            // Nothing to update
+            return this.getSongById(id);
+        }
+
+        // Ensure only uploader can update
+        params.push(id, uploaderEmail);
+        const sql = `UPDATE songs SET ${fields.join(', ')} WHERE id = ? AND uploadedBy = ?`;
+
         return new Promise((resolve, reject) => {
-            let sql = `SELECT * FROM songs WHERE (visibility = ? OR visibility IS NULL`;
-            const params: string[] = ['public'];
-
-            if (userEmail) {
-                sql += ' OR uploadedBy = ?';
-                params.push(userEmail);
-            }
-            sql +=
-                ') AND (title LIKE ? OR artist LIKE ? OR mood LIKE ? OR tags LIKE ? OR lyrics LIKE ?)';
-            const searchPattern = `%${query}%`;
-            params.push(
-                searchPattern,
-                searchPattern,
-                searchPattern,
-                searchPattern,
-                searchPattern,
-            );
-
-            this.db.all<SongRow>(sql, params, (err, rows) => {
-                if (err) reject(err);
-                resolve(rows.map(convertSongRow));
+            this.db.run(sql, params, (err: Error | null) => {
+                if (err) return reject(err);
+                // Return updated song
+                this.getSongById(id)
+                    .then((song) => resolve(song))
+                    .catch(reject);
             });
+        });
+    }
+
+    async incrementPlayCount(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE songs SET playCount = playCount + 1 WHERE id = ?',
+                [id],
+                (err: Error | null) => {
+                    if (err) reject(err);
+                    resolve();
+                },
+            );
         });
     }
 }
