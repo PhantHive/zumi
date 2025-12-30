@@ -1,174 +1,179 @@
 {
-    "name": "zumi",
-    "version": "1.0.0",
-    "description": "Waifu Music Player",
-    "main": "dist/client/src/main/main.js",
-    "type": "module",
-    "scripts": {
-        "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
-        "start:server": "cross-env NODE_ENV=production tsx server/src/server.js",
-        "start:electron": "cross-env NODE_ENV=production electron .",
-        "build:server": "tsc -p server/tsconfig.build.json",
-        "build:client": "webpack --config webpack.config.cjs",
-        "build:electron": "tsc -p client/tsconfig.json",
-        "build:dev": "cross-env NODE_ENV=development npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
-        "build:prod": "cross-env NODE_ENV=production npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
-        "dev": "cross-env NODE_ENV=development concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
-        "dev:renderer": "cross-env NODE_ENV=development webpack serve --config webpack.config.cjs",
-        "dev:electron": "cross-env NODE_ENV=development electron .",
-        "dev:server": "cross-env NODE_ENV=development tsx watch server/src/server.ts",
-        "pack": "npm run build:prod && electron-builder --dir",
-        "make:win": "cross-env NODE_ENV=production node build/configure.mjs && npm run build:prod && electron-builder --win",
-        "copy-public": "copyfiles -u 1 public/**/* dist/client/public/",
-        "copy-assets": "copyfiles -u 2 client/src/assets/**/* dist/client/src/",
-        "lint": "eslint --config eslint.config.js .",
-        "lint:fix": "eslint --config eslint.config.js --fix .",
-        "prettier": "prettier --write .",
-        "prepare": "husky init",
-        "lint:commit": "commitlint -e"
+  "name": "zumi",
+  "version": "1.0.0",
+  "description": "Waifu Music Player",
+  "main": "dist/client/src/main/main.js",
+  "type": "module",
+  "scripts": {
+    "start": "concurrently \"npm run start:server\" \"npm run start:electron\"",
+    "start:server": "cross-env NODE_ENV=production tsx server/src/server.js",
+    "start:electron": "cross-env NODE_ENV=production electron .",
+    "build:server": "tsc -p server/tsconfig.build.json",
+    "build:client": "webpack --config webpack.config.cjs",
+    "build:electron": "tsc -p client/tsconfig.json",
+    "build:dev": "cross-env NODE_ENV=development npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
+    "build:prod": "cross-env NODE_ENV=production npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
+    "dev": "cross-env NODE_ENV=development concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "cross-env NODE_ENV=development webpack serve --config webpack.config.cjs",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "dev:server": "cross-env NODE_ENV=development tsx watch server/src/server.ts",
+    "pack": "npm run build:prod && electron-builder --dir",
+    "make:win": "cross-env NODE_ENV=production node build/configure.mjs && npm run build:prod && electron-builder --win",
+    "copy-public": "copyfiles -u 1 public/**/* dist/client/public/",
+    "copy-assets": "copyfiles -u 2 client/src/assets/**/* dist/client/src/",
+    "lint": "eslint --config eslint.config.js .",
+    "lint:fix": "eslint --config eslint.config.js --fix .",
+    "prettier": "prettier --write .",
+    "test": "node -e \"process.exit(0)\"",
+    "prepare": "husky",
+    "lint:commit": "commitlint -e"
+  },
+  "build": {
+    "appId": "com.zumi.musicplayer",
+    "productName": "Zumi",
+    "directories": {
+      "output": "release"
     },
-    "build": {
-        "appId": "com.zumi.musicplayer",
-        "productName": "Zumi",
-        "directories": {
-            "output": "release"
+    "files": [
+      "dist/client/**/*",
+      "public/**/*",
+      "package.json",
+      "env.json"
+    ],
+    "extraResources": [
+      {
+        "from": "env.json",
+        "to": "env.json"
+      },
+      {
+        "from": "build",
+        "to": "resources"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
         },
-        "files": [
-            "dist/client/**/*",
-            "public/**/*",
-            "package.json",
-            "env.json"
-        ],
-        "extraResources": [
-            {
-                "from": "env.json",
-                "to": "env.json"
-            },
-            {
-                "from": "build",
-                "to": "resources"
-            }
-        ],
-        "win": {
-            "target": [
-                {
-                    "target": "nsis",
-                    "arch": [
-                        "x64"
-                    ]
-                },
-                {
-                    "target": "portable",
-                    "arch": [
-                        "x64"
-                    ]
-                }
-            ],
-            "icon": "public/images/app-icon.ico"
-        },
-        "nsis": {
-            "oneClick": false,
-            "allowToChangeInstallationDirectory": true,
-            "createDesktopShortcut": true,
-            "shortcutName": "Zumi Music"
-        },
-        "mac": {
-            "target": "dmg",
-            "icon": "public/images/app-icon.icns"
-        },
-        "linux": {
-            "target": [
-                "AppImage",
-                "deb"
-            ],
-            "icon": "public/images/app-icon.png"
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
+      ],
+      "icon": "public/images/app-icon.ico"
     },
-    "husky": {
-        "hooks": {
-            "pre-commit": "lint-staged"
-        }
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Zumi Music"
     },
-    "lint-staged": {
-        "*.{js,jsx,ts,tsx}": [
-            "eslint --fix",
-            "prettier --write"
-        ],
-        "*.{json,css,md}": [
-            "prettier --write"
-        ]
+    "mac": {
+      "target": "dmg",
+      "icon": "public/images/app-icon.icns"
     },
-    "author": "Your Name",
-    "license": "ISC",
-    "devDependencies": {
-        "@babel/core": "^7.26.0",
-        "@babel/preset-react": "^7.26.3",
-        "@babel/preset-typescript": "^7.26.0",
-        "@commitlint/cli": "^19.6.0",
-        "@commitlint/config-conventional": "^19.6.0",
-        "@eslint/js": "^9.17.0",
-        "@types/bcrypt": "^6.0.0",
-        "@types/colorthief": "^2.6.0",
-        "@types/cors": "^2.8.17",
-        "@types/express": "^5.0.0",
-        "@types/express-serve-static-core": "^5.0.2",
-        "@types/jsonwebtoken": "^9.0.7",
-        "@types/multer": "^1.4.12",
-        "@types/node": "^22.10.1",
-        "@types/react": "^19.0.1",
-        "@types/react-dom": "^19.0.1",
-        "babel-loader": "^9.2.1",
-        "bcrypt": "^6.0.0",
-        "concurrently": "^9.1.0",
-        "copy-webpack-plugin": "^12.0.2",
-        "copyfiles": "^2.4.1",
-        "cross-env": "^7.0.3",
-        "css-loader": "^7.1.2",
-        "electron": "^33.2.1",
-        "electron-builder": "^25.1.8",
-        "eslint": "^9.17.0",
-        "eslint-plugin-react": "^7.37.2",
-        "globals": "^15.13.0",
-        "html-webpack-plugin": "^5.6.3",
-        "husky": "^9.1.7",
-        "lint-staged": "^15.2.11",
-        "prettier": "^3.4.2",
-        "style-loader": "^4.0.0",
-        "ts-node": "^10.9.2",
-        "tsconfig-paths": "^4.2.0",
-        "tsm": "^2.3.0",
-        "tsx": "^4.19.2",
-        "typescript": "^5.7.2",
-        "typescript-eslint": "^8.18.0",
-        "webpack": "^5.97.1",
-        "webpack-cli": "^5.1.4",
-        "webpack-dev-server": "^5.1.0"
-    },
-    "dependencies": {
-        "@electron/remote": "^2.1.2",
-        "cors": "^2.8.5",
-        "discord-rpc": "^4.0.1",
-        "dotenv": "^16.4.7",
-        "dotenv-webpack": "^8.1.0",
-        "electron-squirrel-startup": "^1.0.1",
-        "electron-store": "^10.0.0",
-        "esm": "^3.2.25",
-        "express": "^4.21.2",
-        "get-audio-duration": "^4.0.1",
-        "google-auth-library": "^9.15.0",
-        "jsmediatags": "^3.9.7",
-        "jsonwebtoken": "^9.0.2",
-        "lucide-react": "^0.468.0",
-        "mongoose": "^8.8.4",
-        "multer": "^1.4.5-lts.1",
-        "path-browserify": "^1.0.1",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0",
-        "react-icons": "^5.4.0",
-        "react-router-dom": "^7.0.2",
-        "sass": "^1.83.0",
-        "sass-loader": "^16.0.4",
-        "sharp": "^0.34.5",
-        "sqlite3": "^5.1.7"
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "public/images/app-icon.png"
     }
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
+  },
+  "author": "Your Name",
+  "license": "ISC",
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.26.3",
+    "@babel/preset-typescript": "^7.26.0",
+    "@commitlint/cli": "^19.6.0",
+    "@commitlint/config-conventional": "^19.6.0",
+    "@eslint/js": "^9.17.0",
+    "@types/bcrypt": "^6.0.0",
+    "@types/colorthief": "^2.6.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/express-serve-static-core": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.1",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "babel-loader": "^9.2.1",
+    "bcrypt": "^6.0.0",
+    "concurrently": "^9.1.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "copyfiles": "^2.4.1",
+    "cross-env": "^7.0.3",
+    "css-loader": "^7.1.2",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.2",
+    "globals": "^15.13.0",
+    "html-webpack-plugin": "^5.6.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.11",
+    "prettier": "^3.4.2",
+    "style-loader": "^4.0.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "tsm": "^2.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.1.0"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.13.5",
+    "@electron/remote": "^2.1.2",
+    "cors": "^2.8.5",
+    "discord-rpc": "^4.0.1",
+    "dotenv": "^16.4.7",
+    "dotenv-webpack": "^8.1.0",
+    "electron-squirrel-startup": "^1.0.1",
+    "electron-store": "^10.0.0",
+    "esm": "^3.2.25",
+    "express": "^4.21.2",
+    "fluent-ffmpeg": "^2.1.2",
+    "get-audio-duration": "^4.0.1",
+    "google-auth-library": "^9.15.0",
+    "jsmediatags": "^3.9.7",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.468.0",
+    "mongoose": "^8.8.4",
+    "multer": "^1.4.5-lts.1",
+    "path-browserify": "^1.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-icons": "^5.4.0",
+    "react-router-dom": "^7.0.2",
+    "sass": "^1.83.0",
+    "sass-loader": "^16.0.4",
+    "sharp": "^0.34.5",
+    "sqlite3": "^5.1.7",
+    "ytdl-core": "^4.11.5",
+    "youtube-search-api": "^1.2.1"
+  }
 }
