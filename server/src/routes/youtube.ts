@@ -1,4 +1,4 @@
-import { Router, Request, Response, RequestHandler } from 'express';
+import { Router, RequestHandler } from 'express';
 import ytdl from '@distube/ytdl-core';
 import yts from 'youtube-search-api';
 import ffmpeg from 'fluent-ffmpeg';
@@ -6,10 +6,143 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFile as execFileCb } from 'child_process';
-import { promisify } from 'util';
 import puppeteer from 'puppeteer-core';
 
-const execFile = promisify(execFileCb);
+// Small wrapper to run execFile and return stdout/stderr as a promise
+function runExecFile(command: string, args: string[], options: any = {}): Promise<{ stdout: string; stderr: string; }> {
+    return new Promise((resolve, reject) => {
+        execFileCb(command, args, options, (err, stdout, stderr) => {
+            if (err) {
+                // attach stdout/stderr for better diagnostics
+                (err as any).stdout = stdout;
+                (err as any).stderr = stderr;
+                return reject(err);
+            }
+            resolve({ stdout: String(stdout || ''), stderr: String(stderr || '') });
+        });
+    });
+}
+
+// Helper: locate a Chrome/Chromium executable for puppeteer-core across OSes
+function findChromeExecutable(): string | null {
+    const envPath = process.env.CHROME_PATH || process.env.CHROMIUM_PATH || process.env.CHROME_BIN;
+    if (envPath && fs.existsSync(envPath)) return envPath;
+    const platform = process.platform;
+    const candidates: string[] = [];
+    if (platform === 'win32') {
+        const programFiles = process.env['PROGRAMFILES'] || 'C:\\Program Files';
+        const programFilesx86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+        candidates.push(path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'));
+        candidates.push(path.join(programFilesx86, 'Google', 'Chrome', 'Application', 'chrome.exe'));
+        candidates.push(path.join(programFiles, 'Chromium', 'Application', 'chrome.exe'));
+        candidates.push(path.join(programFilesx86, 'Chromium', 'Application', 'chrome.exe'));
+    } else if (platform === 'darwin') {
+        candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+        candidates.push('/Applications/Chromium.app/Contents/MacOS/Chromium');
+    } else {
+        candidates.push('/usr/bin/google-chrome');
+        candidates.push('/usr/bin/google-chrome-stable');
+        candidates.push('/usr/bin/chromium');
+        candidates.push('/usr/bin/chromium-browser');
+        candidates.push('/snap/bin/chromium');
+    }
+    for (const c of candidates) {
+        try { if (fs.existsSync(c)) return c; } catch (e) { /* ignore */ }
+    }
+    return null;
+}
+
+// Puppeteer fallback: try to get a direct audio URL by evaluating the page's player response.
+async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: string) {
+    const exe = findChromeExecutable();
+    if (!exe) throw new Error('No Chrome/Chromium executable found. Set CHROME_PATH or install Chrome/Chromium.');
+    const browser = await puppeteer.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], headless: true });
+    try {
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        const playerResp = await page.evaluate(() => {
+            try {
+                // @ts-ignore
+                if (typeof window !== 'undefined' && (window as any).ytInitialPlayerResponse) return (window as any).ytInitialPlayerResponse;
+                // @ts-ignore
+                if ((window as any).ytplayer && (window as any).ytplayer.config && (window as any).ytplayer.config.args && (window as any).ytplayer.config.args.player_response) {
+                    return JSON.parse((window as any).ytplayer.config.args.player_response);
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        });
+
+        if (!playerResp || !playerResp.streamingData) return null;
+        const formats = playerResp.streamingData.adaptiveFormats || [];
+        const audioFormats = formats.filter((f: any) => f.mimeType && /audio\//.test(f.mimeType));
+        const withUrl = audioFormats.find((f: any) => f.url) || audioFormats[0];
+        if (!withUrl || !withUrl.url) return null;
+        const audioUrl = withUrl.url as string;
+        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+        await new Promise<void>((resolve, reject) => {
+            try {
+                (ffmpeg as any)(audioUrl).audioBitrate(128).format('mp3').on('error', (err: Error) => reject(err)).on('end', () => resolve()).save(audioPath);
+            } catch (e) { reject(e as Error); }
+        });
+        let thumbnailPath: string | null = null;
+        const thumbs = playerResp.videoDetails?.thumbnail?.thumbnails || playerResp.microformat?.playerMicroformatRenderer?.thumbnail?.thumbnails || [];
+        if (Array.isArray(thumbs) && thumbs.length) {
+            const thumbUrl = thumbs[thumbs.length - 1].url;
+            try {
+                const resp = await page.goto(thumbUrl, { timeout: 15000 });
+                if (resp && resp.buffer) {
+                    const buffer = await resp.buffer();
+                    thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+                    await fs.promises.writeFile(thumbnailPath, buffer);
+                }
+            } catch (e) { /* ignore thumbnail errors */ }
+        }
+        return { info: playerResp, audioPath, thumbnailPath };
+    } finally { try { await browser.close(); } catch (e) { /* ignore */ } }
+}
+
+async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string, cookies?: string | undefined) {
+    const jsonCmd = ['-j', videoUrl];
+    try {
+        let infoJson: any = null;
+        try {
+            const out = await runExecFile('yt-dlp', jsonCmd, { maxBuffer: 10 * 1024 * 1024 });
+            infoJson = JSON.parse(out.stdout);
+        } catch (e: any) {
+            if (e.code === 'ENOENT') throw new Error('yt-dlp not found on PATH. Install yt-dlp or add it to PATH.');
+            throw e;
+        }
+
+        const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
+        const args: string[] = ['-x', '--audio-format', 'mp3', '--no-post-overwrites', '--embed-thumbnail', '--add-metadata', '-o', audioTemplate, videoUrl];
+        let cookieFilePath: string | null = null;
+        if (cookies) {
+            cookieFilePath = path.join(tmpDir, `cookies-${timestamp}.txt`);
+            try { await fs.promises.writeFile(cookieFilePath, cookies, { encoding: 'utf8' }); args.unshift(cookieFilePath); args.unshift('--cookies'); } catch (e) { cookieFilePath = null; }
+        }
+
+        try {
+            await runExecFile('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 });
+        } catch (e: any) {
+            if (e.code === 'ENOENT') throw new Error('yt-dlp not found on PATH. Install yt-dlp or add it to PATH.');
+            throw e;
+        }
+
+        const possibleAudio = path.join(tmpDir, `audio-${timestamp}.mp3`);
+        const audioPath = fs.existsSync(possibleAudio) ? possibleAudio : null;
+        const thumbExts = ['jpg', 'jpeg', 'png', 'webp', 'webm'];
+        let thumbnailPath: string | null = null;
+        for (const ext of thumbExts) {
+            const p = path.join(tmpDir, `audio-${timestamp}.${ext}`);
+            if (fs.existsSync(p)) { thumbnailPath = p; break; }
+        }
+        if (cookieFilePath) { try { fs.unlinkSync(cookieFilePath); } catch (e) { /* ignore */ } }
+        return { info: infoJson, audioPath, thumbnailPath };
+    } catch (err: any) { throw err; }
+}
 
 const router = Router();
 
@@ -53,158 +186,6 @@ const searchHandler: RequestHandler = async (req, res) => {
         return;
     }
 };
-
-// Puppeteer fallback: try to get a direct audio URL by evaluating the page's player response.
-async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: string) {
-    const browser = await puppeteer.launch({
-        executablePath: '/usr/bin/chromium',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-        headless: true,
-    });
-    try {
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-
-        const playerResp = await page.evaluate(() => {
-            // @ts-ignore
-            try {
-                // Modern YouTube exposes this
-                // @ts-ignore
-                if (typeof window !== 'undefined' && (window as any).ytInitialPlayerResponse) return (window as any).ytInitialPlayerResponse;
-                // @ts-ignore
-                if ((window as any).ytplayer && (window as any).ytplayer.config && (window as any).ytplayer.config.args && (window as any).ytplayer.config.args.player_response) {
-                    return JSON.parse((window as any).ytplayer.config.args.player_response);
-                }
-            } catch (e) {
-                return null;
-            }
-            return null;
-        });
-
-        if (!playerResp || !playerResp.streamingData) {
-            return null;
-        }
-
-        const formats = playerResp.streamingData.adaptiveFormats || [];
-        // prefer audio mime formats with direct url
-        const audioFormats = formats.filter((f: any) => f.mimeType && /audio\//.test(f.mimeType));
-        const withUrl = audioFormats.find((f: any) => f.url) || audioFormats[0];
-        if (!withUrl || !withUrl.url) {
-            // cannot extract direct URL without signature deciphering
-            return null;
-        }
-
-        const audioUrl = withUrl.url as string;
-
-        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-
-        // Use ffmpeg to convert remote audio stream to mp3
-        await new Promise<void>((resolve, reject) => {
-            try {
-                (ffmpeg as any)(audioUrl)
-                    .audioBitrate(128)
-                    .format('mp3')
-                    .on('error', (err: Error) => reject(err))
-                    .on('end', () => resolve())
-                    .save(audioPath);
-            } catch (e) {
-                reject(e as Error);
-            }
-        });
-
-        // find thumbnail if available
-        let thumbnailPath: string | null = null;
-        const thumbs = playerResp.videoDetails?.thumbnail?.thumbnails || playerResp.microformat?.playerMicroformatRenderer?.thumbnail?.thumbnails || [];
-        if (Array.isArray(thumbs) && thumbs.length) {
-            const thumbUrl = thumbs[thumbs.length - 1].url;
-            try {
-                const resp = await page.goto(thumbUrl, { timeout: 15000 });
-                if (resp && resp.buffer) {
-                    const buffer = await resp.buffer();
-                    thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
-                    await fs.promises.writeFile(thumbnailPath, buffer);
-                }
-            } catch (e) {
-                // ignore thumbnail errors
-            }
-        }
-
-        return { info: playerResp, audioPath, thumbnailPath };
-    } finally {
-        try { await browser.close(); } catch (e) { /* ignore */ }
-    }
-}
-
-async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string, cookies?: string | undefined) {
-    // Use yt-dlp CLI to fetch metadata and extract audio + thumbnail
-    const jsonCmd = ['-j', videoUrl];
-    try {
-        const { stdout } = await execFile('yt-dlp', jsonCmd, { maxBuffer: 10 * 1024 * 1024 });
-        const info = JSON.parse(stdout as string);
-
-        const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
-        const args: string[] = [
-            '-x',
-            '--audio-format',
-            'mp3',
-            '--no-post-overwrites',
-            '--embed-thumbnail',
-            '--add-metadata',
-            '-o',
-            audioTemplate,
-            videoUrl,
-        ];
-
-        // If cookies were provided, write to a temp file and pass --cookies
-        let cookieFilePath: string | null = null;
-        if (cookies) {
-            cookieFilePath = path.join(tmpDir, `cookies-${timestamp}.txt`);
-            try {
-                await fs.promises.writeFile(cookieFilePath, cookies, { encoding: 'utf8' });
-                // insert --cookies before output template
-                const outIndex = args.indexOf('-o');
-                if (outIndex >= 0) {
-                    args.splice(outIndex, 0, '--cookies');
-                    args.splice(outIndex + 1, 0, cookieFilePath);
-                } else {
-                    args.push('--cookies', cookieFilePath);
-                }
-            } catch (e) {
-                cookieFilePath = null;
-            }
-        }
-
-        await execFile('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 });
-
-        // Find produced audio file and thumbnail
-        const possibleAudio = path.join(tmpDir, `audio-${timestamp}.mp3`);
-        let audioPath = fs.existsSync(possibleAudio) ? possibleAudio : null;
-
-        const thumbExts = ['jpg', 'jpeg', 'png', 'webp', 'webm'];
-        let thumbnailPath: string | null = null;
-        for (const ext of thumbExts) {
-            const p = path.join(tmpDir, `audio-${timestamp}.${ext}`);
-            if (fs.existsSync(p)) {
-                thumbnailPath = p;
-                break;
-            }
-        }
-
-        // Cleanup cookie file if present
-        if (cookieFilePath) {
-            try { fs.unlinkSync(cookieFilePath); } catch (e) { /* ignore */ }
-        }
-
-        return {
-            info,
-            audioPath,
-            thumbnailPath,
-        };
-    } catch (err: any) {
-        throw err;
-    }
-}
 
 // POST /api/youtube/download
 const downloadHandler: RequestHandler = async (req, res) => {
@@ -256,31 +237,31 @@ const downloadHandler: RequestHandler = async (req, res) => {
                 }
                 try {
                     const result = await ytDlpFallback(videoUrl, timestamp, tmpDir, cookies);
-                     const videoDetails = result.info;
-                     const durationSeconds = parseInt(videoDetails.duration || videoDetails.duration_seconds || '0', 10) || (videoDetails.duration ? Math.floor(videoDetails.duration) : 0);
+                    const videoDetails = result.info;
+                    const durationSeconds = parseInt(videoDetails.duration || videoDetails.duration_seconds || '0', 10) || (videoDetails.duration ? Math.floor(videoDetails.duration) : 0);
 
-                     // Check file size if audioPath exists
-                     if (result.audioPath) {
-                         const stats = fs.statSync(result.audioPath);
-                         const maxSize = 50 * 1024 * 1024; // 50MB
-                         if (stats.size > maxSize) {
-                             try { fs.unlinkSync(result.audioPath); } catch (e) { /* ignore */ }
-                             res.status(400).json({ error: 'Audio file too large (>50MB)' });
-                             return;
-                         }
-                     }
+                    // Check file size if audioPath exists
+                    if (result.audioPath) {
+                        const stats = fs.statSync(result.audioPath);
+                        const maxSize = 50 * 1024 * 1024; // 50MB
+                        if (stats.size > maxSize) {
+                            try { fs.unlinkSync(result.audioPath); } catch (e) { /* ignore */ }
+                            res.status(400).json({ error: 'Audio file too large (>50MB)' });
+                            return;
+                        }
+                    }
 
-                     res.json({
-                         audioPath: result.audioPath,
-                         thumbnailPath: result.thumbnailPath,
-                         metadata: {
-                             title: videoDetails.title || videoDetails.fulltitle || '',
-                             artist: videoDetails.uploader || videoDetails.channel || '',
-                             duration: durationSeconds,
-                             description: videoDetails.description || videoDetails.full_description || '',
-                         },
-                     });
-                     return;
+                    res.json({
+                        audioPath: result.audioPath,
+                        thumbnailPath: result.thumbnailPath,
+                        metadata: {
+                            title: videoDetails.title || videoDetails.fulltitle || '',
+                            artist: videoDetails.uploader || videoDetails.channel || '',
+                            duration: durationSeconds,
+                            description: videoDetails.description || videoDetails.full_description || '',
+                        },
+                    });
+                    return;
                 } catch (fallbackErr: any) {
                     console.error('yt-dlp fallback failed:', fallbackErr);
                     res.status(500).json({ error: 'Download failed', message: 'ytdl blocked and yt-dlp fallback failed: ' + String(fallbackErr?.message || fallbackErr) });
@@ -363,6 +344,23 @@ const downloadHandler: RequestHandler = async (req, res) => {
         return;
     }
 };
+
+router.get('/check-deps', async (req, res) => {
+    try {
+        const chromePath = findChromeExecutable();
+        let ytDlpVersion: string | null = null;
+        try {
+            const out = await runExecFile('yt-dlp', ['--version']);
+            ytDlpVersion = (out.stdout || '').trim();
+        } catch (e: any) {
+            // not installed or not on PATH
+            ytDlpVersion = null;
+        }
+        res.json({ chromePath: chromePath || null, ytDlpVersion });
+    } catch (err: any) {
+        res.status(500).json({ error: 'failed', message: String(err?.message || err) });
+    }
+});
 
 router.post('/search', searchHandler);
 router.post('/download', downloadHandler);

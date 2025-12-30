@@ -157,7 +157,7 @@
     "esm": "^3.2.25",
     "express": "^4.21.2",
     "fluent-ffmpeg": "^2.1.2",
-    "puppeteer": "^21.6.0",
+    "puppeteer-core": "^21.6.0",
     "get-audio-duration": "^4.0.1",
     "google-auth-library": "^9.15.0",
     "jsmediatags": "^3.9.7",
