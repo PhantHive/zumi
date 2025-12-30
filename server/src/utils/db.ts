@@ -251,6 +251,7 @@ export class DbClient {
     `;
 
         return new Promise((resolve, reject) => {
+            const self = this;
             this.db.run(
                 sql,
                 [
@@ -270,15 +271,15 @@ export class DbClient {
                     song.lyrics || null,
                     song.tags ? song.tags.join(', ') : null,
                 ],
-                function (err: Error | null) {
+                function (this: any, err: Error | null) {
                     if (err) {
                         reject(err);
                         return;
                     }
                     const lastId = this.lastID;
-                    // Fetch the created song by ID
-                    db.getSongById(lastId)
-                        .then((newSong) => {
+                    // Fetch the created song by ID using the class instance
+                    self.getSongById(lastId)
+                        .then((newSong: Song | null) => {
                             if (!newSong)
                                 reject(new Error('Failed to create song'));
                             else resolve(newSong);
@@ -363,6 +364,29 @@ export class DbClient {
         });
     }
 
+    async searchSongs(query: string, userEmail?: string): Promise<Song[]> {
+        const q = `%${query}%`;
+        return new Promise((resolve, reject) => {
+            // Build SQL to include public songs and uploader's private songs
+            let sql = 'SELECT * FROM songs WHERE (visibility = ? OR visibility IS NULL';
+            const params: (string | number)[] = ['public'];
+
+            if (userEmail) {
+                sql += ' OR uploadedBy = ?';
+                params.push(userEmail);
+            }
+
+            sql += ') AND (title LIKE ? OR artist LIKE ? OR albumId LIKE ? OR tags LIKE ?)';
+
+            params.push(q, q, q, q);
+
+            this.db.all<SongRow>(sql, params, (err, rows) => {
+                if (err) return reject(err);
+                resolve(rows.map(convertSongRow));
+            });
+        });
+    }
+
     async updateSongVisibility(
         id: number,
         visibility: 'public' | 'private',
@@ -372,102 +396,23 @@ export class DbClient {
             this.db.run(
                 'UPDATE songs SET visibility = ? WHERE id = ? AND uploadedBy = ?',
                 [visibility, id, uploaderEmail],
-                function (err: Error | null) {
-                    if (err) reject(err);
+                function (err) {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
                     resolve(this.changes > 0);
                 },
             );
         });
     }
 
-    async deleteSong(id: number, uploaderEmail: string): Promise<boolean> {
+    async close(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.db.run(
-                'DELETE FROM songs WHERE id = ? AND uploadedBy = ?',
-                [id, uploaderEmail],
-                function (err: Error | null) {
-                    if (err) reject(err);
-                    resolve(this.changes > 0);
-                },
-            );
-        });
-    }
-
-    async updateSong(
-        id: number,
-        updates: Partial<Omit<Song, 'id' | 'filepath'>> & { filepath?: string; duration?: number },
-        uploaderEmail: string,
-    ): Promise<Song | null> {
-        // Build dynamic SET clause
-        const fields: string[] = [];
-        const params: (string | number | null)[] = [];
-
-        const allowed = [
-            'title',
-            'artist',
-            'duration',
-            'filepath',
-            'albumId',
-            'thumbnailUrl',
-            'genre',
-            'uploadedBy',
-            'visibility',
-            'year',
-            'bpm',
-            'mood',
-            'language',
-            'lyrics',
-            'tags',
-        ];
-
-        for (const key of Object.keys(updates)) {
-            if (!allowed.includes(key)) continue;
-            const val = (updates as any)[key];
-            fields.push(`${key} = ?`);
-            if (key === 'tags' && Array.isArray(val)) params.push((val as string[]).join(', '));
-            else params.push(val ?? null);
-        }
-
-        if (fields.length === 0) {
-            // Nothing to update
-            return this.getSongById(id);
-        }
-
-        // Ensure only uploader can update
-        params.push(id, uploaderEmail);
-        const sql = `UPDATE songs SET ${fields.join(', ')} WHERE id = ? AND uploadedBy = ?`;
-
-        return new Promise((resolve, reject) => {
-            this.db.run(sql, params, (err: Error | null) => {
-                if (err) return reject(err);
-                // Return updated song
-                this.getSongById(id)
-                    .then((song) => resolve(song))
-                    .catch(reject);
+            this.db.close((err) => {
+                if (err) reject(err);
+                resolve();
             });
         });
     }
-
-    async incrementPlayCount(id: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.db.run(
-                'UPDATE songs SET playCount = playCount + 1 WHERE id = ?',
-                [id],
-                (err: Error | null) => {
-                    if (err) reject(err);
-                    resolve();
-                },
-            );
-        });
-    }
 }
-
-// Determine database path based on environment
-const isDev = process.env.NODE_ENV === 'development';
-const DB_PATH = isDev
-    ? path.join(process.cwd(), 'music.db')
-    : '/app/database/music.db';
-
-console.log('Using database path:', DB_PATH);
-
-export const db = new DbClient({ filename: DB_PATH });
