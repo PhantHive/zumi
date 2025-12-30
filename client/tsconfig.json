@@ -11,7 +11,8 @@
         "rootDir": "../",
         "jsx": "react-jsx",
         "baseUrl": "../",
-        "typeRoots": ["../node_modules/@types", "./src/types"]
+        "typeRoots": ["../node_modules/@types", "./src/types"],
+        "types": []
     },
     "include": ["src/**/*", "../shared/**/*"],
     "exclude": ["../node_modules"]

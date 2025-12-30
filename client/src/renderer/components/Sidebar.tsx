@@ -1,4 +1,3 @@
-declare module 'jsmediatags';
 import React, { useRef, useState, useEffect } from 'react';
 import { apiClient } from '../utils/apiClient';
 import { GENRES, Genre } from '../../../../shared/types/common';
@@ -103,7 +102,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                     }
                 }
                 if (tags.lyrics && !lyrics) {
-                    const lyricsText = tags.lyrics.lyrics || tags.lyrics;
+                    const lyricsText =
+                        typeof tags.lyrics === 'string'
+                            ? tags.lyrics
+                            : tags.lyrics.lyrics;
                     if (typeof lyricsText === 'string') {
                         setLyrics(lyricsText);
                     }
@@ -261,6 +263,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
             <div className={`sidebar ${isOpen ? 'open' : ''}`}>
                 <h2>Konichiwa, {userName}!</h2>
                 <form onSubmit={handleUpload} className="upload-section">
+                    {/* File Pickers Section */}
                     <input
                         ref={audioInputRef}
                         type="file"
@@ -278,16 +281,26 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                         style={{ marginBottom: '10px' }}
                         disabled={isUploading}
                     />
-                    <label htmlFor="file-upload-audio">Choose audio file</label>
-                    <label htmlFor="file-upload-thumbnail">
-                        Choose thumbnail{' '}
-                        {extractedThumbnail && '(auto-detected)'}
+                    <label htmlFor="file-upload-audio">
+                        {audioInputRef.current?.files?.[0]?.name ||
+                            'Choose Audio File'}
                     </label>
+                    <label htmlFor="file-upload-thumbnail">
+                        {thumbnailInputRef.current?.files?.[0]?.name ||
+                            (extractedThumbnail
+                                ? 'Thumbnail (Auto-detected)'
+                                : 'Choose Thumbnail (Optional)')}
+                    </label>
+
+                    {/* Basic Information Section */}
+                    <div className="section-header">
+                        <h3>Basic Information</h3>
+                    </div>
 
                     {/* Song Title */}
                     <input
                         type="text"
-                        placeholder="Song Title (optional)"
+                        placeholder="Song Title"
                         value={songTitle}
                         onChange={(e) => setSongTitle(e.target.value)}
                         style={{ marginBottom: '10px' }}
@@ -396,20 +409,44 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                     </select>
 
                     {/* Visibility Select */}
-                    <select
-                        value={visibility}
-                        onChange={(e) =>
-                            setVisibility(
-                                e.target.value as 'public' | 'private',
-                            )
-                        }
-                        style={{ marginBottom: '10px' }}
-                        disabled={isUploading}
-                        className="visibility-select"
-                    >
-                        <option value="public">Public</option>
-                        <option value="private">Private</option>
-                    </select>
+                    <div className="visibility-container">
+                        <label className="visibility-label">
+                            <span className="visibility-icon-text">
+                                <span>
+                                    {visibility === 'public' ? '🌐' : '🔒'}
+                                </span>
+                                <span>
+                                    {visibility === 'public'
+                                        ? 'Public'
+                                        : 'Private'}
+                                </span>
+                            </span>
+                            <select
+                                value={visibility}
+                                onChange={(e) =>
+                                    setVisibility(
+                                        e.target.value as 'public' | 'private',
+                                    )
+                                }
+                                disabled={isUploading}
+                                className="visibility-select"
+                                style={{
+                                    width: 'auto',
+                                    padding: '6px 10px',
+                                    fontSize: '0.9rem',
+                                    marginBottom: '0',
+                                }}
+                            >
+                                <option value="public">Public</option>
+                                <option value="private">Private</option>
+                            </select>
+                        </label>
+                        <p className="visibility-description">
+                            {visibility === 'public'
+                                ? 'Everyone can see and play this song'
+                                : 'Only you can see and play this song'}
+                        </p>
+                    </div>
 
                     {/* Advanced Options Toggle */}
                     <button
@@ -420,38 +457,50 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                         disabled={isUploading}
                     >
                         {showAdvanced
-                            ? '▼ Hide Advanced Options'
-                            : '▶ Show Advanced Options'}
+                            ? '▼ Hide Additional Details'
+                            : '▶ Show Additional Details (Optional)'}
                     </button>
 
                     {/* Advanced Options */}
                     {showAdvanced && (
                         <div className="advanced-options">
-                            <input
-                                type="number"
-                                placeholder="Year (e.g., 2023)"
-                                value={year}
-                                onChange={(e) => setYear(e.target.value)}
-                                style={{ marginBottom: '10px' }}
-                                disabled={isUploading}
-                                min="1900"
-                                max="2100"
-                            />
+                            <div className="section-header">
+                                <h3>Additional Details</h3>
+                            </div>
 
-                            <input
-                                type="number"
-                                placeholder="BPM (e.g., 120)"
-                                value={bpm}
-                                onChange={(e) => setBpm(e.target.value)}
-                                style={{ marginBottom: '10px' }}
-                                disabled={isUploading}
-                                min="1"
-                                max="300"
-                            />
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    gap: '10px',
+                                    width: '100%',
+                                }}
+                            >
+                                <input
+                                    type="number"
+                                    placeholder="Year"
+                                    value={year}
+                                    onChange={(e) => setYear(e.target.value)}
+                                    style={{ marginBottom: '10px', flex: 1 }}
+                                    disabled={isUploading}
+                                    min="1900"
+                                    max="2100"
+                                />
+
+                                <input
+                                    type="number"
+                                    placeholder="BPM"
+                                    value={bpm}
+                                    onChange={(e) => setBpm(e.target.value)}
+                                    style={{ marginBottom: '10px', flex: 1 }}
+                                    disabled={isUploading}
+                                    min="1"
+                                    max="300"
+                                />
+                            </div>
 
                             <input
                                 type="text"
-                                placeholder="Mood (e.g., energetic, chill)"
+                                placeholder="Mood (e.g., Happy, Melancholic, Energetic)"
                                 value={mood}
                                 onChange={(e) => setMood(e.target.value)}
                                 style={{ marginBottom: '10px' }}
@@ -460,7 +509,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
 
                             <input
                                 type="text"
-                                placeholder="Language (e.g., en, ja, ko)"
+                                placeholder="Language"
                                 value={language}
                                 onChange={(e) => setLanguage(e.target.value)}
                                 style={{ marginBottom: '10px' }}
@@ -470,7 +519,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
 
                             <input
                                 type="text"
-                                placeholder="Tags (comma-separated: pop, dance, upbeat)"
+                                placeholder="Tags (comma-separated)"
                                 value={tags}
                                 onChange={(e) => setTags(e.target.value)}
                                 style={{ marginBottom: '10px' }}
@@ -491,7 +540,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                     )}
 
                     <button type="submit" disabled={isUploading}>
-                        {isUploading ? 'Uploading...' : 'Upload'}
+                        {isUploading ? '⏳ Uploading...' : '☁️ Upload Song'}
                     </button>
                 </form>
             </div>

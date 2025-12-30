@@ -56,6 +56,9 @@ module.exports = {
     },
     resolve: {
         extensions: ['.ts', '.tsx', '.js', '.jsx'],
+        fallback: {
+            'react-native-fs': false,
+        },
     },
     plugins: [
         new HtmlWebpackPlugin({

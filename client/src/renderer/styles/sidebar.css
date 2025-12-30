@@ -4,7 +4,7 @@
     top: 0;
     height: 100vh;
     z-index: 1000;
-    width: 0; /* Add this to prevent taking space when closed */
+    width: 0;
 }
 
 .sidebar {
@@ -13,19 +13,29 @@
     top: 0;
     height: 100vh;
     width: 20vw;
-    background: var(--background-dark);
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(20px);
     padding: 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
     box-sizing: border-box;
     z-index: 1000;
+    overflow-y: auto;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
 }
 
 .sidebar.open {
     transform: translateX(20vw);
+}
+
+.sidebar h2 {
+    color: #ffffff;
+    margin-bottom: 24px;
+    font-size: 1.5rem;
+    text-align: center;
+    text-shadow: 0 2px 10px rgba(255, 105, 180, 0.3);
 }
 
 .upload-section {
@@ -40,111 +50,298 @@
 }
 
 .upload-section label,
-.upload-section button {
+.upload-section button[type='submit'] {
     display: inline-block;
-    padding: 10px 20px;
-    margin-bottom: 10px;
-    border-radius: 25px;
+    padding: 14px 20px;
+    margin-bottom: 12px;
+    border-radius: 12px;
     cursor: pointer;
     transition:
-        transform 0.3s,
-        box-shadow 0.3s;
+        transform 0.2s,
+        box-shadow 0.2s,
+        background 0.2s;
     text-align: center;
     width: 100%;
     color: white;
     box-sizing: border-box;
+    font-weight: 600;
+    font-size: 0.95rem;
 }
 
 .upload-section label {
-    background: var(--primary-color);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
-.upload-section label:hover,
-.upload-section button:hover {
-    transform: scale(1.05);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+.upload-section label:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
 }
 
-.upload-section button {
-    background: var(--secondary-color);
+.upload-section button[type='submit'] {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     border: none;
+    margin-top: 16px;
+    font-size: 1rem;
+    box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
 }
 
-.upload-section button:disabled {
-    background: #666;
+.upload-section button[type='submit']:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(245, 87, 108, 0.5);
+}
+
+.upload-section button[type='submit']:disabled {
+    background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
+    opacity: 0.6;
 }
 
 .upload-section select,
-.upload-section input[type='text'] {
+.upload-section input[type='text'],
+.upload-section input[type='number'],
+.upload-section textarea {
     width: 100%;
-    padding: 10px;
-    margin-bottom: 10px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 25px;
-    color: white;
+    border-radius: 10px;
+    color: #ffffff;
     outline: none;
     box-sizing: border-box;
+    transition: all 0.2s;
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.upload-section input::placeholder,
+.upload-section textarea::placeholder {
+    color: rgba(255, 255, 255, 0.5);
 }
 
 .upload-section select:focus,
-.upload-section input[type='text']:focus {
-    border-color: var(--primary-color);
+.upload-section input[type='text']:focus,
+.upload-section input[type='number']:focus,
+.upload-section textarea:focus {
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.upload-section textarea {
+    resize: vertical;
+    min-height: 80px;
+    font-size: 0.9rem;
+    line-height: 1.5;
 }
 
 .input-container {
     position: relative;
     width: 100%;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     box-sizing: border-box;
+}
+
+.input-container input {
+    margin-bottom: 0;
 }
 
 .suggestions {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
-    background: rgb(30, 30, 30);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1e1e2f;
+    border: 1px solid rgba(102, 126, 234, 0.3);
     border-radius: 10px;
     max-height: 200px;
     overflow-y: auto;
     z-index: 1000;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     box-sizing: border-box;
 }
 
 .suggestion-item {
-    padding: 8px 16px;
+    padding: 10px 16px;
     cursor: pointer;
     transition: background-color 0.2s;
+    color: #ffffff;
+    font-size: 0.9rem;
 }
 
 .suggestion-item:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(102, 126, 234, 0.2);
 }
 
-.genre-select {
+.genre-select,
+.visibility-select {
     width: 100%;
-    padding: 10px;
+    padding: 12px 16px;
     background: rgba(255, 255, 255, 0.1);
-    color: white;
+    color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 25px;
+    border-radius: 10px;
     outline: none;
     cursor: pointer;
     box-sizing: border-box;
+    transition: all 0.2s;
+    font-size: 0.95rem;
 }
 
-.genre-select:focus {
-    border-color: var(--primary-color);
+.genre-select:focus,
+.visibility-select:focus {
+    border-color: #667eea;
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
 }
 
-.genre-select option {
-    background: rgb(30, 30, 30);
-    color: white;
-    padding: 8px;
+.genre-select option,
+.visibility-select option {
+    background: #1e1e2f;
+    color: #ffffff;
+    padding: 10px;
+}
+
+.advanced-toggle {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+    text-align: left;
+    box-sizing: border-box;
+    font-weight: 500;
+}
+
+.advanced-toggle:hover:not(:disabled) {
+    background: rgba(102, 126, 234, 0.15);
+    border-color: #667eea;
+    color: #ffffff;
+}
+
+.advanced-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.advanced-options {
+    width: 100%;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Section styling */
+.section-divider {
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(102, 126, 234, 0.5),
+        transparent
+    );
+    margin: 15px 0;
+}
+
+.section-header h3 {
+    color: #a0aec0 !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 1.5px !important;
+    margin-bottom: 12px !important;
+    margin-top: 20px !important;
+    width: 100% !important;
+    text-align: left !important;
+}
+
+/* Scrollbar styling for sidebar */
+.sidebar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.5);
+    border-radius: 10px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 126, 234, 0.7);
+}
+
+/* Custom styling for file input labels with icons */
+.upload-section label[for='file-upload-audio']::before {
+    content: '🎵 ';
+    margin-right: 6px;
+}
+
+.upload-section label[for='file-upload-thumbnail']::before {
+    content: '🖼️ ';
+    margin-right: 6px;
+}
+
+/* Visibility container styling */
+.visibility-container {
+    width: 100%;
+    margin-bottom: 12px;
+}
+
+.visibility-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.visibility-label:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #667eea;
+}
+
+.visibility-icon-text {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #ffffff;
+    font-weight: 500;
+}
+
+.visibility-description {
+    font-size: 0.75rem;
+    color: #a0aec0;
+    margin-top: 6px;
+    margin-left: 4px;
+    line-height: 1.4;
 }
