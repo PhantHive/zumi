@@ -7,7 +7,7 @@ import path from 'path';
 import os from 'os';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 
 const execFile = promisify(execFileCb);
 
@@ -57,6 +57,7 @@ const searchHandler: RequestHandler = async (req, res) => {
 // Puppeteer fallback: try to get a direct audio URL by evaluating the page's player response.
 async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: string) {
     const browser = await puppeteer.launch({
+        executablePath: '/usr/bin/chromium',
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
         headless: true,
     });
@@ -135,7 +136,7 @@ async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: st
     }
 }
 
-async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string) {
+async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string, cookies?: string | undefined) {
     // Use yt-dlp CLI to fetch metadata and extract audio + thumbnail
     const jsonCmd = ['-j', videoUrl];
     try {
@@ -143,7 +144,7 @@ async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string
         const info = JSON.parse(stdout as string);
 
         const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
-        const args = [
+        const args: string[] = [
             '-x',
             '--audio-format',
             'mp3',
@@ -154,6 +155,25 @@ async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string
             audioTemplate,
             videoUrl,
         ];
+
+        // If cookies were provided, write to a temp file and pass --cookies
+        let cookieFilePath: string | null = null;
+        if (cookies) {
+            cookieFilePath = path.join(tmpDir, `cookies-${timestamp}.txt`);
+            try {
+                await fs.promises.writeFile(cookieFilePath, cookies, { encoding: 'utf8' });
+                // insert --cookies before output template
+                const outIndex = args.indexOf('-o');
+                if (outIndex >= 0) {
+                    args.splice(outIndex, 0, '--cookies');
+                    args.splice(outIndex + 1, 0, cookieFilePath);
+                } else {
+                    args.push('--cookies', cookieFilePath);
+                }
+            } catch (e) {
+                cookieFilePath = null;
+            }
+        }
 
         await execFile('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 });
 
@@ -171,6 +191,11 @@ async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string
             }
         }
 
+        // Cleanup cookie file if present
+        if (cookieFilePath) {
+            try { fs.unlinkSync(cookieFilePath); } catch (e) { /* ignore */ }
+        }
+
         return {
             info,
             audioPath,
@@ -185,6 +210,7 @@ async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string
 const downloadHandler: RequestHandler = async (req, res) => {
     try {
         const { videoId } = req.body;
+        const cookies = req.body.cookies as string | undefined;
         // try puppeteer fallback before asking for cookies-based yt-dlp
         const tryPuppeteerFirst = true;
         if (!videoId || typeof videoId !== 'string') {
@@ -229,32 +255,32 @@ const downloadHandler: RequestHandler = async (req, res) => {
                     }
                 }
                 try {
-                    const result = await ytDlpFallback(videoUrl, timestamp, tmpDir);
-                    const videoDetails = result.info;
-                    const durationSeconds = parseInt(videoDetails.duration || videoDetails.duration_seconds || '0', 10) || (videoDetails.duration ? Math.floor(videoDetails.duration) : 0);
+                    const result = await ytDlpFallback(videoUrl, timestamp, tmpDir, cookies);
+                     const videoDetails = result.info;
+                     const durationSeconds = parseInt(videoDetails.duration || videoDetails.duration_seconds || '0', 10) || (videoDetails.duration ? Math.floor(videoDetails.duration) : 0);
 
-                    // Check file size if audioPath exists
-                    if (result.audioPath) {
-                        const stats = fs.statSync(result.audioPath);
-                        const maxSize = 50 * 1024 * 1024; // 50MB
-                        if (stats.size > maxSize) {
-                            try { fs.unlinkSync(result.audioPath); } catch (e) { /* ignore */ }
-                            res.status(400).json({ error: 'Audio file too large (>50MB)' });
-                            return;
-                        }
-                    }
+                     // Check file size if audioPath exists
+                     if (result.audioPath) {
+                         const stats = fs.statSync(result.audioPath);
+                         const maxSize = 50 * 1024 * 1024; // 50MB
+                         if (stats.size > maxSize) {
+                             try { fs.unlinkSync(result.audioPath); } catch (e) { /* ignore */ }
+                             res.status(400).json({ error: 'Audio file too large (>50MB)' });
+                             return;
+                         }
+                     }
 
-                    res.json({
-                        audioPath: result.audioPath,
-                        thumbnailPath: result.thumbnailPath,
-                        metadata: {
-                            title: videoDetails.title || videoDetails.fulltitle || '',
-                            artist: videoDetails.uploader || videoDetails.channel || '',
-                            duration: durationSeconds,
-                            description: videoDetails.description || videoDetails.full_description || '',
-                        },
-                    });
-                    return;
+                     res.json({
+                         audioPath: result.audioPath,
+                         thumbnailPath: result.thumbnailPath,
+                         metadata: {
+                             title: videoDetails.title || videoDetails.fulltitle || '',
+                             artist: videoDetails.uploader || videoDetails.channel || '',
+                             duration: durationSeconds,
+                             description: videoDetails.description || videoDetails.full_description || '',
+                         },
+                     });
+                     return;
                 } catch (fallbackErr: any) {
                     console.error('yt-dlp fallback failed:', fallbackErr);
                     res.status(500).json({ error: 'Download failed', message: 'ytdl blocked and yt-dlp fallback failed: ' + String(fallbackErr?.message || fallbackErr) });

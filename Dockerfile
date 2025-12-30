@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
     wget \
+    chromium \
     fonts-liberation \
     libnss3 \
     libatk1.0-0 \
