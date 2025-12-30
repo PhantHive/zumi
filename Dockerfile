@@ -2,9 +2,10 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install ffmpeg and yt-dlp (requires python3/pip)
-RUN apt-get update && apt-get install -y ffmpeg python3 python3-pip && \
-    pip3 install --no-cache-dir --break-system-packages yt-dlp && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg and download yt-dlp static binary (avoid pip/PEP668 issues)
+RUN apt-get update && apt-get install -y ffmpeg ca-certificates curl && \
+    curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+    chmod +x /usr/local/bin/yt-dlp && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
