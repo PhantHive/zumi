@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response, RequestHandler } from 'express';
 import ytdl from '@distube/ytdl-core';
 import yts from 'youtube-search-api';
 import ffmpeg from 'fluent-ffmpeg';
@@ -11,16 +11,18 @@ const router = Router();
 // Require auth middleware from parent router (server already wraps /api/youtube with auth)
 
 // POST /api/youtube/search
-router.post('/search', async (req, res) => {
+const searchHandler: RequestHandler = async (req, res) => {
     try {
         const { query } = req.body;
         if (!query || typeof query !== 'string' || query.trim() === '') {
-            return res.status(400).json({ error: 'Query required' });
+            res.status(400).json({ error: 'Query required' });
+            return;
         }
 
-        const results = await yts.GetListByKeyword(query, false, 20);
+        const results = await (yts as any).GetListByKeyword(query, false, 20);
         if (!results || !Array.isArray(results.items)) {
-            return res.json({ data: [] });
+            res.json({ data: [] });
+            return;
         }
 
         const formatted = results.items
@@ -39,28 +41,32 @@ router.post('/search', async (req, res) => {
             });
 
         res.json({ data: formatted });
+        return;
     } catch (error) {
         console.error('YouTube search error:', error);
         res.status(500).json({ error: 'Search failed' });
+        return;
     }
-});
+};
 
 // POST /api/youtube/download
-router.post('/download', async (req, res) => {
+const downloadHandler: RequestHandler = async (req, res) => {
     try {
         const { videoId } = req.body;
         if (!videoId || typeof videoId !== 'string') {
-            return res.status(400).json({ error: 'Video ID required' });
+            res.status(400).json({ error: 'Video ID required' });
+            return;
         }
 
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-        const info = await ytdl.getInfo(videoUrl);
+        const info = await (ytdl as any).getInfo(videoUrl);
         const videoDetails = info.videoDetails;
 
         const durationSeconds = parseInt(videoDetails.lengthSeconds || '0', 10);
         // Limit duration to 10 minutes
         if (durationSeconds > 600) {
-            return res.status(400).json({ error: 'Video too long (max 10 minutes)' });
+            res.status(400).json({ error: 'Video too long (max 10 minutes)' });
+            return;
         }
 
         const timestamp = Date.now();
@@ -69,10 +75,10 @@ router.post('/download', async (req, res) => {
         const thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
 
         // Download audio stream and convert to mp3 via ffmpeg
-        const audioStream = ytdl(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
+        const audioStream = (ytdl as any)(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
 
         await new Promise<void>((resolve, reject) => {
-            ffmpeg(audioStream)
+            (ffmpeg as any)(audioStream)
                 .audioBitrate(128)
                 .format('mp3')
                 .on('error', (err: Error) => {
@@ -91,7 +97,8 @@ router.post('/download', async (req, res) => {
             } catch (e) {
                 /* ignore */
             }
-            return res.status(400).json({ error: 'Audio file too large (>50MB)' });
+            res.status(400).json({ error: 'Audio file too large (>50MB)' });
+            return;
         }
 
         // Download thumbnail (best available)
@@ -118,11 +125,15 @@ router.post('/download', async (req, res) => {
                 description: videoDetails.description || '',
             },
         });
+        return;
     } catch (error: any) {
         console.error('YouTube download error:', error);
         res.status(500).json({ error: 'Download failed', message: error?.message || String(error) });
+        return;
     }
-});
+};
+
+router.post('/search', searchHandler);
+router.post('/download', downloadHandler);
 
 export default router;
-
