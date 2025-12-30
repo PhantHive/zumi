@@ -407,6 +407,83 @@ export class DbClient {
         });
     }
 
+    async deleteSong(id: number, uploaderEmail: string): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'DELETE FROM songs WHERE id = ? AND uploadedBy = ?',
+                [id, uploaderEmail],
+                function (this: any, err: Error | null) {
+                    if (err) return reject(err);
+                    resolve(this.changes > 0);
+                },
+            );
+        });
+    }
+
+    async updateSong(
+        id: number,
+        updates: Partial<Omit<Song, 'id'>> & { filepath?: string; duration?: number },
+        uploaderEmail: string,
+    ): Promise<Song | null> {
+        const allowed = [
+            'title',
+            'artist',
+            'duration',
+            'filepath',
+            'albumId',
+            'thumbnailUrl',
+            'genre',
+            'uploadedBy',
+            'visibility',
+            'year',
+            'bpm',
+            'mood',
+            'language',
+            'lyrics',
+            'tags',
+        ];
+
+        const fields: string[] = [];
+        const params: (string | number | null)[] = [];
+
+        for (const key of Object.keys(updates)) {
+            if (!allowed.includes(key)) continue;
+            const val = (updates as any)[key];
+            fields.push(`${key} = ?`);
+            if (key === 'tags' && Array.isArray(val)) params.push((val as string[]).join(', '));
+            else params.push(val ?? null);
+        }
+
+        if (fields.length === 0) {
+            return this.getSongById(id);
+        }
+
+        params.push(id, uploaderEmail);
+        const sql = `UPDATE songs SET ${fields.join(', ')} WHERE id = ? AND uploadedBy = ?`;
+
+        return new Promise((resolve, reject) => {
+            this.db.run(sql, params, (err: Error | null) => {
+                if (err) return reject(err);
+                this.getSongById(id)
+                    .then((song) => resolve(song))
+                    .catch(reject);
+            });
+        });
+    }
+
+    async incrementPlayCount(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'UPDATE songs SET playCount = playCount + 1 WHERE id = ?',
+                [id],
+                (err: Error | null) => {
+                    if (err) return reject(err);
+                    resolve();
+                },
+            );
+        });
+    }
+
     async close(): Promise<void> {
         return new Promise((resolve, reject) => {
             this.db.close((err) => {
@@ -416,3 +493,13 @@ export class DbClient {
         });
     }
 }
+
+// Determine database path based on environment
+const isDev = process.env.NODE_ENV === 'development';
+const DB_PATH = isDev
+    ? path.join(process.cwd(), 'music.db')
+    : '/app/database/music.db';
+
+console.log('Using database path:', DB_PATH);
+
+export const db = new DbClient({ filename: DB_PATH });
