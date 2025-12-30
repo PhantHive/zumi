@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install ffmpeg and yt-dlp (requires python3/pip)
 RUN apt-get update && apt-get install -y ffmpeg python3 python3-pip && \
-    pip3 install --no-cache-dir yt-dlp && rm -rf /var/lib/apt/lists/*
+    pip3 install --no-cache-dir --break-system-packages yt-dlp && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
