@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     chromium \
+    python3 \
     fonts-liberation \
     libnss3 \
     libatk1.0-0 \
