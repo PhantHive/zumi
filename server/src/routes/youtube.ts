@@ -7,6 +7,7 @@ import path from 'path';
 import os from 'os';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
+import puppeteer from 'puppeteer';
 
 const execFile = promisify(execFileCb);
 
@@ -52,6 +53,87 @@ const searchHandler: RequestHandler = async (req, res) => {
         return;
     }
 };
+
+// Puppeteer fallback: try to get a direct audio URL by evaluating the page's player response.
+async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: string) {
+    const browser = await puppeteer.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        headless: true,
+    });
+    try {
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+        const playerResp = await page.evaluate(() => {
+            // @ts-ignore
+            try {
+                // Modern YouTube exposes this
+                // @ts-ignore
+                if (typeof window !== 'undefined' && (window as any).ytInitialPlayerResponse) return (window as any).ytInitialPlayerResponse;
+                // @ts-ignore
+                if ((window as any).ytplayer && (window as any).ytplayer.config && (window as any).ytplayer.config.args && (window as any).ytplayer.config.args.player_response) {
+                    return JSON.parse((window as any).ytplayer.config.args.player_response);
+                }
+            } catch (e) {
+                return null;
+            }
+            return null;
+        });
+
+        if (!playerResp || !playerResp.streamingData) {
+            return null;
+        }
+
+        const formats = playerResp.streamingData.adaptiveFormats || [];
+        // prefer audio mime formats with direct url
+        const audioFormats = formats.filter((f: any) => f.mimeType && /audio\//.test(f.mimeType));
+        const withUrl = audioFormats.find((f: any) => f.url) || audioFormats[0];
+        if (!withUrl || !withUrl.url) {
+            // cannot extract direct URL without signature deciphering
+            return null;
+        }
+
+        const audioUrl = withUrl.url as string;
+
+        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+
+        // Use ffmpeg to convert remote audio stream to mp3
+        await new Promise<void>((resolve, reject) => {
+            try {
+                (ffmpeg as any)(audioUrl)
+                    .audioBitrate(128)
+                    .format('mp3')
+                    .on('error', (err: Error) => reject(err))
+                    .on('end', () => resolve())
+                    .save(audioPath);
+            } catch (e) {
+                reject(e as Error);
+            }
+        });
+
+        // find thumbnail if available
+        let thumbnailPath: string | null = null;
+        const thumbs = playerResp.videoDetails?.thumbnail?.thumbnails || playerResp.microformat?.playerMicroformatRenderer?.thumbnail?.thumbnails || [];
+        if (Array.isArray(thumbs) && thumbs.length) {
+            const thumbUrl = thumbs[thumbs.length - 1].url;
+            try {
+                const resp = await page.goto(thumbUrl, { timeout: 15000 });
+                if (resp && resp.buffer) {
+                    const buffer = await resp.buffer();
+                    thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+                    await fs.promises.writeFile(thumbnailPath, buffer);
+                }
+            } catch (e) {
+                // ignore thumbnail errors
+            }
+        }
+
+        return { info: playerResp, audioPath, thumbnailPath };
+    } finally {
+        try { await browser.close(); } catch (e) { /* ignore */ }
+    }
+}
 
 async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string) {
     // Use yt-dlp CLI to fetch metadata and extract audio + thumbnail
@@ -103,6 +185,8 @@ async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string
 const downloadHandler: RequestHandler = async (req, res) => {
     try {
         const { videoId } = req.body;
+        // try puppeteer fallback before asking for cookies-based yt-dlp
+        const tryPuppeteerFirst = true;
         if (!videoId || typeof videoId !== 'string') {
             res.status(400).json({ error: 'Video ID required' });
             return;
@@ -118,9 +202,32 @@ const downloadHandler: RequestHandler = async (req, res) => {
             const msg = String(err?.message || err);
             // Detect YouTube "sign in to confirm" / consent blocks
             if (/sign in to confirm|bot|captcha|login required|verify/i.test(msg)) {
-                console.warn('ytdl-core blocked, attempting yt-dlp fallback:', msg);
+                console.warn('ytdl-core blocked, attempting puppeteer then yt-dlp fallback:', msg);
                 const timestamp = Date.now();
                 const tmpDir = os.tmpdir();
+                if (tryPuppeteerFirst) {
+                    try {
+                        const pResult = await puppeteerFallback(videoUrl, timestamp, tmpDir);
+                        if (pResult && pResult.audioPath) {
+                            const videoDetails = pResult.info;
+                            const durationSeconds = parseInt(videoDetails?.videoDetails?.lengthSeconds || videoDetails?.length || '0', 10) || 0;
+                            res.json({
+                                audioPath: pResult.audioPath,
+                                thumbnailPath: pResult.thumbnailPath || null,
+                                metadata: {
+                                    title: videoDetails?.videoDetails?.title || videoDetails?.title || '',
+                                    artist: videoDetails?.videoDetails?.author?.name || videoDetails?.uploader || '',
+                                    duration: durationSeconds,
+                                    description: videoDetails?.videoDetails?.shortDescription || videoDetails?.description || '',
+                                },
+                            });
+                            return;
+                        }
+                    } catch (puErr: any) {
+                        console.warn('puppeteer fallback failed (will try yt-dlp):', puErr?.message || puErr);
+                        // fall through to yt-dlp fallback
+                    }
+                }
                 try {
                     const result = await ytDlpFallback(videoUrl, timestamp, tmpDir);
                     const videoDetails = result.info;
