@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
-RUN npm install --production
+RUN npm install
 
 # Copy built server files
 COPY dist/ ./dist/
