@@ -66,10 +66,11 @@ jobs:
             docker stop music-server || true
             docker rm music-server || true
             
-            # Create directories
+            # Create directories including config
             mkdir -p /opt/music-server/uploads/thumbnails
             mkdir -p /opt/music-server/data
             mkdir -p /opt/music-server/database
+            mkdir -p /opt/music-server/config  # ADD THIS LINE
             
             # Load and validate API_PORT
             API_PORT=$(grep API_PORT /home/Phearion/Zumi/.env | cut -d '=' -f2 | tr -d '\r\n ')
@@ -89,6 +90,8 @@ jobs:
               -v /opt/music-server/uploads:/app/uploads \
               -v /opt/music-server/data:/app/data \
               -v /opt/music-server/database:/app/database \
+              -v /opt/music-server/config:/app/config \
+              -e YOUTUBE_COOKIES_PATH=/app/config/youtube_anon.txt \
               zaphial/music-server:${{ env.TAG_NAME }}
             
             # Check if container started successfully
