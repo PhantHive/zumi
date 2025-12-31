@@ -6,6 +6,8 @@ import { Song, Genre } from '../../../shared/types/common.js';
 import * as fs from 'node:fs';
 import { AuthenticatedRequest } from './authController.js';
 import User from '../models/User.js';
+import os from 'os';
+import fetch from 'node-fetch';
 
 type MulterRequest = Request & {
     files?: {
@@ -185,6 +187,118 @@ export class SongController {
         }
     };
 
+    // Import a song by referencing server-side or remote URLs (used by mobile client)
+    importSong: RequestHandler = async (req, res) => {
+        try {
+            const authenticatedReq = req as AuthenticatedRequest;
+            const userEmail = authenticatedReq.user.email;
+
+            const isDev = process.env.NODE_ENV === 'development';
+            const baseMusicPath = isDev ? path.resolve('./public/data') : '/app/data';
+            const baseThumbnailPath = isDev
+                ? path.resolve('./public/uploads/thumbnails')
+                : '/app/uploads/thumbnails';
+
+            await fs.promises.mkdir(baseMusicPath, { recursive: true });
+            await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
+
+            const { audioPath, thumbnailPath } = req.body as { audioPath?: string; thumbnailPath?: string };
+
+            if (!audioPath) {
+                res.status(400).json({ error: 'audioPath required' });
+                return;
+            }
+
+            // Helper to move a temp file into permanent storage; if not present, try downloading
+            const moveOrDownload = async (fileUrl: string, destDir: string, prefix: string) => {
+                const basename = path.basename(fileUrl);
+                const tmpFile = path.join(os.tmpdir(), basename);
+                const ext = path.extname(basename) || '.bin';
+                const newName = `${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`;
+                const destPath = path.join(destDir, newName);
+
+                if (fs.existsSync(tmpFile)) {
+                    await fs.promises.rename(tmpFile, destPath);
+                    return { filename: newName, fullpath: destPath };
+                }
+
+                // Try fetching via HTTP
+                try {
+                    const fullUrl = fileUrl.startsWith('/') ? `${process.env.SERVER_PUBLIC_URL || ''}${fileUrl}` : fileUrl;
+                    const resp = await fetch(fullUrl);
+                    if (!resp.ok) throw new Error(`Failed to download ${fullUrl}: ${resp.status}`);
+                    const buffer = Buffer.from(await resp.arrayBuffer());
+                    await fs.promises.writeFile(destPath, buffer);
+                    return { filename: newName, fullpath: destPath };
+                } catch (e: any) {
+                    throw new Error('Failed to move or download file: ' + (e?.message || e));
+                }
+            };
+
+            // Move audio
+            let audioResult;
+            try {
+                audioResult = await moveOrDownload(audioPath, baseMusicPath, 'audio');
+            } catch (e: any) {
+                console.error('Audio import failed:', e);
+                res.status(500).json({ error: 'Audio import failed' });
+                return;
+            }
+
+            // Move thumbnail (optional)
+            let thumbnailFilename: string | undefined = undefined;
+            if (thumbnailPath) {
+                try {
+                    const thumbResult = await moveOrDownload(thumbnailPath, baseThumbnailPath, 'thumb');
+                    thumbnailFilename = thumbResult.filename;
+                } catch (e: any) {
+                    console.warn('Thumbnail import failed, continuing without thumbnail:', e?.message || e);
+                }
+            }
+
+            // Determine duration (best effort) using the temp file path we just moved
+            let duration = 0;
+            try {
+                duration = Math.floor(await getAudioDurationInSeconds(audioResult.fullpath));
+            } catch (e) {
+                console.warn('Failed to read audio duration:', e);
+            }
+
+            const tags = req.body.tags
+                ? (req.body.tags as string).split(',').map((t: string) => t.trim())
+                : undefined;
+
+            const song: Partial<Song> = {
+                title: req.body.title || path.parse(audioResult.filename).name,
+                artist: req.body.artist || 'Unknown Artist',
+                duration: duration || 0,
+                albumId: req.body.album || 'Unknown Album',
+                filepath: path.join(baseMusicPath, audioResult.filename),
+                thumbnailUrl: thumbnailFilename || 'placeholder.jpg',
+                uploadedBy: userEmail,
+                visibility: req.body.visibility || 'public',
+                year: req.body.year ? parseInt(req.body.year) : undefined,
+                bpm: req.body.bpm ? parseInt(req.body.bpm) : undefined,
+                mood: req.body.mood,
+                language: req.body.language,
+                lyrics: req.body.lyrics,
+                tags,
+            };
+
+            const newSong = await db.createSong({
+                ...song,
+                genre: (req.body.genre as Genre) || undefined,
+            });
+
+            res.status(201).json({ data: newSong });
+            return;
+        } catch (error) {
+            console.error('Error importing song:', error);
+            res.status(500).json({ error: 'Failed to import song' });
+            return;
+        }
+    };
+
     streamSong: RequestHandler = async (req, res) => {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
@@ -312,12 +426,10 @@ export class SongController {
             if (req.body.language) updates.language = req.body.language;
             if (req.body.lyrics) updates.lyrics = req.body.lyrics;
             if (req.body.genre) updates.genre = req.body.genre;
-            if (req.body.tags) {
-                updates.tags = req.body.tags
-                    .split(',')
-                    .map((t: string) => t.trim())
-                    .filter(Boolean);
-            }
+            if (req.body.tags) updates.tags = req.body.tags
+                .split(',')
+                .map((t: string) => t.trim())
+                .filter(Boolean);
 
             const updated = await db.updateSong(songId, updates, userEmail);
             if (!updated) {

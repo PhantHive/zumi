@@ -98,13 +98,21 @@ app.get('/api/mobile/version', (req, res) => {
     }
 });
 
-// Start the server
-app.listen(PORT, () => {
+// Start the server and increase the server timeout to support long-running requests
+const serverInstance = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    console.log('Server timeout configured to support long-running tasks');
 });
 
+// Set a generous timeout (ms) for long-running child processes like yt-dlp
+try {
+    serverInstance.setTimeout(5 * 60 * 1000); // 5 minutes
+} catch (err) {
+    console.warn('Failed to set server timeout:', err);
+}
+
 // Global error handler to log unexpected errors
-app.use((err: any, req: any, res: any, next: any) => {
+app.use((err: any, req: any, res: any, _next: any) => {
     console.error('Unhandled server error:', err && err.stack ? err.stack : err);
     if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' });

@@ -1,4 +1,4 @@
-import { Router, RequestHandler } from 'express';
+import { Router, Request, Response } from 'express';
 import yts from 'youtube-search-api';
 import fs from 'fs';
 import path from 'path';
@@ -6,6 +6,18 @@ import os from 'os';
 import { execFile as execFileCb } from 'child_process';
 
 const router = Router();
+
+// Simple in-memory job store for async downloads
+type JobStatus = 'pending' | 'done' | 'failed';
+interface Job {
+    id: string;
+    status: JobStatus;
+    createdAt: number;
+    updatedAt: number;
+    result?: any;
+    error?: string;
+}
+const jobs = new Map<string, Job>();
 
 // Promisify execFile
 function runExecFile(command: string, args: string[], options: any = {}): Promise<{ stdout: string; stderr: string; }> {
@@ -21,11 +33,235 @@ function runExecFile(command: string, args: string[], options: any = {}): Promis
     });
 }
 
+// Helper to perform the download work (extracted from downloadHandler)
+async function performDownloadTask(videoId?: string, title?: string, artist?: string) {
+    const timestamp = Date.now();
+    const tmpDir = os.tmpdir();
+
+    // Build search query
+    let searchQuery = '';
+    if (artist && title) searchQuery = `${artist} ${title}`;
+    else if (title) searchQuery = title;
+    else if (artist) searchQuery = artist;
+    searchQuery = searchQuery.trim();
+
+    // 1. YouTube thumbnail
+    let youtubeThumbnailPath: string | null = null;
+    if (videoId) {
+        try {
+            const ytThumbUrl = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+            const response = await fetch(ytThumbUrl);
+            if (response.ok) {
+                const buffer = Buffer.from(await response.arrayBuffer());
+                youtubeThumbnailPath = path.join(tmpDir, `yt-thumb-${timestamp}.jpg`);
+                await fs.promises.writeFile(youtubeThumbnailPath, buffer);
+            } else {
+                const ytThumbUrlStd = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+                const response2 = await fetch(ytThumbUrlStd);
+                if (response2.ok) {
+                    const buffer = Buffer.from(await response2.arrayBuffer());
+                    youtubeThumbnailPath = path.join(tmpDir, `yt-thumb-${timestamp}.jpg`);
+                    await fs.promises.writeFile(youtubeThumbnailPath, buffer);
+                }
+            }
+        } catch (e: any) {
+            console.warn('YouTube thumbnail failed:', e?.message || e);
+        }
+    }
+
+    // 2. Search SoundCloud
+    let scData: any = null;
+    try {
+        const { stdout } = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], {
+            maxBuffer: 20 * 1024 * 1024,
+            timeout: 30000
+        });
+        const lines = String(stdout).split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+        if (lines.length === 0) throw new Error('No results from yt-dlp');
+        scData = JSON.parse(lines[0]);
+    } catch (e: any) {
+        throw new Error('SoundCloud search failed: ' + (e?.message || e));
+    }
+
+    const scUrl = scData.webpage_url || scData.url;
+    if (!scUrl) throw new Error('Song not found on SoundCloud');
+
+    // 3. Download audio from SoundCloud
+    const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+    try {
+        await runExecFile('yt-dlp', [
+            '-f', 'bestaudio',
+            '--extract-audio',
+            '--audio-format', 'mp3',
+            '--audio-quality', '128K',
+            '-o', audioPath,
+            '--no-warnings',
+            scUrl
+        ], {
+            maxBuffer: 200 * 1024 * 1024,
+            timeout: 120000
+        });
+    } catch (e: any) {
+        throw new Error('SoundCloud download failed: ' + (e?.message || e));
+    }
+
+    if (!fs.existsSync(audioPath)) throw new Error('No audio file created');
+
+    // 4. Thumbnail fallback
+    let finalThumbnailPath = youtubeThumbnailPath;
+    if (!finalThumbnailPath && scData.thumbnail) {
+        try {
+            const response = await fetch(scData.thumbnail);
+            const buffer = Buffer.from(await response.arrayBuffer());
+            finalThumbnailPath = path.join(tmpDir, `sc-thumb-${timestamp}.jpg`);
+            await fs.promises.writeFile(finalThumbnailPath, buffer);
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    // 5. Size check
+    const stats = fs.statSync(audioPath);
+    if (stats.size > 50 * 1024 * 1024) {
+        try { fs.unlinkSync(audioPath); } catch (e) { }
+        if (finalThumbnailPath) {
+            try { fs.unlinkSync(finalThumbnailPath); } catch (e) { }
+        }
+        throw new Error('File too large (>50MB)');
+    }
+
+    // 6. Match quality (reuse function in file)
+    const matchQuality = calculateMatchQuality(title || '', scData.title || '', artist);
+
+    const result = {
+        audioPath: `/api/youtube/download-file/${path.basename(audioPath)}`,
+        thumbnailPath: finalThumbnailPath ? `/api/youtube/download-file/${path.basename(finalThumbnailPath)}` : null,
+        metadata: {
+            youtubeTitle: title || 'Unknown',
+            soundcloudTitle: scData.title || '',
+            artist: scData.uploader || scData.uploader_id || artist || 'Unknown',
+            duration: parseInt(String(scData.duration || '0'), 10) || 0,
+            description: scData.description || '',
+            matchQuality,
+            thumbnailSource: youtubeThumbnailPath ? 'YouTube' : (finalThumbnailPath ? 'SoundCloud' : null)
+        },
+        source: 'hybrid'
+    };
+
+    return result;
+}
+
+// Download handler: enqueue job, run in background and wait briefly for quick completion
+const downloadHandler = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { videoId, title, artist } = req.body as { videoId?: string; title?: string; artist?: string };
+
+        console.log('📥 Download request (enqueue):', JSON.stringify({ videoId, title, artist }));
+
+        const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const job: Job = { id: jobId, status: 'pending', createdAt: Date.now(), updatedAt: Date.now() };
+        jobs.set(jobId, job);
+
+        // Start background processing
+        (async () => {
+            try {
+                const result = await performDownloadTask(videoId, title, artist);
+                const j = jobs.get(jobId);
+                if (j) {
+                    j.status = 'done';
+                    j.result = result;
+                    j.updatedAt = Date.now();
+                    jobs.set(jobId, j);
+                }
+            } catch (err: any) {
+                console.error('Background download job failed:', err?.message || err);
+                const j = jobs.get(jobId);
+                if (j) {
+                    j.status = 'failed';
+                    j.error = err?.message || String(err);
+                    j.updatedAt = Date.now();
+                    jobs.set(jobId, j);
+                }
+            }
+        })();
+
+        // Wait up to 45 seconds for quick jobs to finish to maintain compatibility
+        const waitTimeoutMs = 45000;
+        const pollIntervalMs = 500;
+        const start = Date.now();
+
+        const waitForResult = () => new Promise<void>((resolve) => {
+            const iv = setInterval(() => {
+                const j = jobs.get(jobId);
+                if (!j) {
+                    clearInterval(iv);
+                    resolve();
+                    return;
+                }
+                if (j.status === 'done' || j.status === 'failed') {
+                    clearInterval(iv);
+                    resolve();
+                    return;
+                }
+                if (Date.now() - start > waitTimeoutMs) {
+                    clearInterval(iv);
+                    resolve();
+                    return;
+                }
+            }, pollIntervalMs);
+        });
+
+        await waitForResult();
+
+        const finishedJob = jobs.get(jobId);
+        if (finishedJob?.status === 'done') {
+            // Return result immediately
+            res.json(finishedJob.result);
+            return;
+        }
+        if (finishedJob?.status === 'failed') {
+            res.status(500).json({ error: finishedJob.error || 'Download failed' });
+            return;
+        }
+
+        // Job still pending -> return 202 with jobId so client can poll
+        res.status(202).json({ jobId, message: 'Processing started. Poll /api/youtube/download/status/:jobId' });
+        return;
+
+    } catch (error: any) {
+        console.error('Download enqueue error:', error);
+        res.status(500).json({ error: 'Download failed' });
+        return;
+    }
+};
+
+// Status endpoint
+const statusHandler = (req: Request, res: Response): void => {
+    const { jobId } = req.params as { jobId?: string };
+    if (!jobId) { res.status(400).json({ error: 'jobId required' }); return; }
+    const job = jobs.get(jobId);
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    res.json({ id: job.id, status: job.status, createdAt: job.createdAt, updatedAt: job.updatedAt, error: job.error });
+    return;
+};
+
+// Result endpoint
+const resultHandler = (req: Request, res: Response): void => {
+    const { jobId } = req.params as { jobId?: string };
+    if (!jobId) { res.status(400).json({ error: 'jobId required' }); return; }
+    const job = jobs.get(jobId);
+    if (!job) { res.status(404).json({ error: 'Job not found' }); return; }
+    if (job.status === 'pending') { res.status(202).json({ status: 'pending' }); return; }
+    if (job.status === 'failed') { res.status(500).json({ error: job.error || 'Job failed' }); return; }
+    res.json(job.result);
+    return;
+};
+
 // ========================================================================
 // YOUTUBE SEARCH - USING WORKING youtube-search-api
 // ========================================================================
 
-const searchHandler: RequestHandler = async (req, res) => {
+const searchHandler = async (req: Request, res: Response): Promise<void> => {
     try {
         const { query } = req.body;
         if (!query || typeof query !== 'string' || query.trim() === '') {
@@ -113,183 +349,7 @@ function calculateMatchQuality(youtubeTitle: string, soundcloudTitle: string, ar
     return 'uncertain';
 }
 
-const downloadHandler: RequestHandler = async (req, res) => {
-    try {
-        const { videoId, title, artist } = req.body as { videoId?: string; title?: string; artist?: string };
-
-        console.log('📥 Download request:', JSON.stringify({ videoId, title, artist }));
-
-        // Build search query
-        let searchQuery = '';
-        if (artist && title) {
-            searchQuery = `${artist} ${title}`;
-        } else if (title) {
-            searchQuery = title;
-        } else if (artist) {
-            searchQuery = artist;
-        } else {
-            res.status(400).json({
-                error: 'At least title or artist is required',
-                hint: 'Send { videoId, title } or { title, artist }'
-            });
-            return;
-        }
-
-        searchQuery = searchQuery.trim();
-        const timestamp = Date.now();
-        const tmpDir = os.tmpdir();
-
-        console.log(`🔍 Searching SoundCloud: "${searchQuery}"`);
-
-        // 1. DOWNLOAD YOUTUBE THUMBNAIL (if videoId provided)
-        let youtubeThumbnailPath: string | null = null;
-        if (videoId) {
-            try {
-                console.log('📸 Downloading YouTube thumbnail...');
-                // Construct high-quality YouTube thumbnail URL
-                const ytThumbUrl = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-
-                const response = await fetch(ytThumbUrl);
-                if (response.ok) {
-                    const buffer = Buffer.from(await response.arrayBuffer());
-                    youtubeThumbnailPath = path.join(tmpDir, `yt-thumb-${timestamp}.jpg`);
-                    await fs.promises.writeFile(youtubeThumbnailPath, buffer);
-                    console.log('✅ YouTube thumbnail downloaded');
-                } else {
-                    // Try standard quality
-                    const ytThumbUrlStd = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-                    const response2 = await fetch(ytThumbUrlStd);
-                    if (response2.ok) {
-                        const buffer = Buffer.from(await response2.arrayBuffer());
-                        youtubeThumbnailPath = path.join(tmpDir, `yt-thumb-${timestamp}.jpg`);
-                        await fs.promises.writeFile(youtubeThumbnailPath, buffer);
-                        console.log('✅ YouTube thumbnail downloaded (standard quality)');
-                    }
-                }
-            } catch (e: any) {
-                console.warn('⚠️ YouTube thumbnail failed:', e.message);
-            }
-        }
-
-        // 2. SEARCH SOUNDCLOUD
-        let searchOut: string;
-        try {
-            const { stdout } = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], {
-                maxBuffer: 20 * 1024 * 1024,
-                timeout: 30000
-            });
-            searchOut = stdout;
-        } catch (e: any) {
-            console.error('SoundCloud search failed:', e.message);
-            res.status(500).json({ error: 'SoundCloud search failed' });
-            return;
-        }
-
-        const lines = searchOut.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length === 0) {
-            res.status(404).json({ error: 'No results found on SoundCloud' });
-            return;
-        }
-
-        const scData = JSON.parse(lines[0]);
-        const scUrl = scData.webpage_url || scData.url;
-        if (!scUrl) {
-            res.status(404).json({ error: 'Song not found on SoundCloud' });
-            return;
-        }
-
-        console.log(`✅ Found on SoundCloud: ${scData.title}`);
-
-        // 3. DOWNLOAD AUDIO FROM SOUNDCLOUD
-        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-
-        try {
-            await runExecFile('yt-dlp', [
-                '-f', 'bestaudio',
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '128K',
-                '-o', audioPath,
-                '--no-warnings',
-                scUrl
-            ], {
-                maxBuffer: 200 * 1024 * 1024,
-                timeout: 120000
-            });
-        } catch (e: any) {
-            console.error('SoundCloud download failed:', e.message);
-            res.status(500).json({ error: 'Download failed' });
-            return;
-        }
-
-        if (!fs.existsSync(audioPath)) {
-            res.status(500).json({ error: 'No audio file created' });
-            return;
-        }
-
-        console.log('✅ Audio downloaded from SoundCloud');
-
-        // 4. SOUNDCLOUD THUMBNAIL FALLBACK (if YouTube failed)
-        let finalThumbnailPath = youtubeThumbnailPath;
-        if (!finalThumbnailPath && scData.thumbnail) {
-            try {
-                const response = await fetch(scData.thumbnail);
-                const buffer = Buffer.from(await response.arrayBuffer());
-                finalThumbnailPath = path.join(tmpDir, `sc-thumb-${timestamp}.jpg`);
-                await fs.promises.writeFile(finalThumbnailPath, buffer);
-                console.log('✅ SoundCloud thumbnail downloaded (fallback)');
-            } catch (e) {
-                console.warn('⚠️ SoundCloud thumbnail failed');
-            }
-        }
-
-        // 5. CHECK SIZE
-        const stats = fs.statSync(audioPath);
-        if (stats.size > 50 * 1024 * 1024) {
-            try { fs.unlinkSync(audioPath); } catch (e) { }
-            if (finalThumbnailPath) {
-                try { fs.unlinkSync(finalThumbnailPath); } catch (e) { }
-            }
-            res.status(400).json({ error: 'File too large (>50MB)' });
-            return;
-        }
-
-        // 6. MATCH QUALITY
-        const matchQuality = calculateMatchQuality(
-            title || '',
-            scData.title || '',
-            artist
-        );
-
-        console.log(`🎯 Match quality: ${matchQuality}`);
-        console.log(`📸 Thumbnail source: ${youtubeThumbnailPath ? 'YouTube' : 'SoundCloud'}`);
-
-        res.json({
-            audioPath: `/api/youtube/download-file/${path.basename(audioPath)}`,
-            thumbnailPath: finalThumbnailPath ? `/api/youtube/download-file/${path.basename(finalThumbnailPath)}` : null,
-            metadata: {
-                youtubeTitle: title || 'Unknown',
-                soundcloudTitle: scData.title || '',
-                artist: scData.uploader || scData.uploader_id || artist || 'Unknown',
-                duration: parseInt(String(scData.duration || '0'), 10) || 0,
-                description: scData.description || '',
-                matchQuality,
-                thumbnailSource: youtubeThumbnailPath ? 'YouTube' : (finalThumbnailPath ? 'SoundCloud' : null)
-            },
-            source: 'hybrid' // YouTube thumbnail + SoundCloud audio
-        });
-
-    } catch (error: any) {
-        console.error('Download error:', error);
-        res.status(500).json({ error: 'Download failed' });
-    }
-};
-
-// ========================================================================
-// FILE HANDLER
-// ========================================================================
-
-const downloadFileHandler: RequestHandler = async (req, res) => {
+const downloadFileHandler = async (req: Request, res: Response): Promise<void> => {
     try {
         const { filename } = req.params as { filename?: string };
         if (!filename) {
@@ -334,6 +394,7 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
     } catch (err: any) {
         console.error('File handler error:', err);
         res.status(500).json({ error: 'Failed to serve file' });
+        return;
     }
 };
 
@@ -347,6 +408,8 @@ export { downloadFileHandler };
 router.get('/download-file/:filename', downloadFileHandler);
 router.post('/search', searchHandler);
 router.post('/download', downloadHandler);
+router.get('/download/status/:jobId', statusHandler);
+router.get('/download/result/:jobId', resultHandler);
 
 export default router;
 
