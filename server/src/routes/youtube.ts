@@ -6,7 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFile as execFileCb } from 'child_process';
-import puppeteer from 'puppeteer-core';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
 // Add ambient Window declarations for YouTube player globals used inside page.evaluate
 declare global {
@@ -60,6 +61,8 @@ function findChromeExecutable(): string | null {
 async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: string; poToken: string } | null> {
     const exe = findChromeExecutable();
     if (!exe) return null;
+
+    puppeteer.use(StealthPlugin());
 
     const browser = await puppeteer.launch({
         executablePath: exe,
