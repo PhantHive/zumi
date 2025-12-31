@@ -8,6 +8,15 @@ import os from 'os';
 import { execFile as execFileCb } from 'child_process';
 import puppeteer from 'puppeteer-core';
 
+// Add ambient Window declarations for YouTube player globals used inside page.evaluate
+declare global {
+    interface Window {
+        ytInitialPlayerResponse?: any;
+        ytplayer?: any;
+        ytcfg?: any;
+    }
+}
+
 const router = Router();
 
 function runExecFile(command: string, args: string[], options: any = {}): Promise<{ stdout: string; stderr: string; }> {
@@ -70,8 +79,8 @@ async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: 
         // Extract visitor data and PO token from page
         const tokens = await page.evaluate(() => {
             try {
-                // @ts-ignore
-                const ytcfg = window.ytcfg;
+                const w: any = window as any;
+                const ytcfg = w.ytcfg;
                 if (ytcfg && ytcfg.data_) {
                     const visitorData = ytcfg.data_.VISITOR_DATA || ytcfg.data_.visitorData;
                     const delegatedSessionId = ytcfg.data_.DELEGATED_SESSION_ID;
@@ -82,6 +91,7 @@ async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: 
                     };
                 }
             } catch (e) {
+                // eslint-disable-next-line no-console
                 console.error('Failed to extract tokens:', e);
             }
             return null;
@@ -130,15 +140,15 @@ async function puppeteerExtraction(videoUrl: string, timestamp: number, tmpDir: 
         // Extract player response
         const playerData = await page.evaluate(() => {
             try {
-                // @ts-ignore
-                if (window.ytInitialPlayerResponse) {
-                    return window.ytInitialPlayerResponse;
+                const w: any = window as any;
+                if (w.ytInitialPlayerResponse) {
+                    return w.ytInitialPlayerResponse;
                 }
-                // @ts-ignore
-                if (window.ytplayer?.config?.args?.player_response) {
-                    return JSON.parse(window.ytplayer.config.args.player_response);
+                if (w.ytplayer?.config?.args?.player_response) {
+                    return JSON.parse(w.ytplayer.config.args.player_response);
                 }
             } catch (e) {
+                // eslint-disable-next-line no-console
                 console.error('Failed to extract player data:', e);
             }
             return null;
@@ -459,3 +469,4 @@ router.post('/search', searchHandler);
 router.post('/download', downloadHandler);
 
 export default router;
+
