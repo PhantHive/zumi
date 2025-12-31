@@ -103,7 +103,7 @@ const searchYouTube: RequestHandler = async (req, res) => {
 // downloadYouTube: retained name but downloads from SoundCloud using yt-dlp (no cookies)
 const downloadYouTube: RequestHandler = async (req, res) => {
     try {
-        const { videoId } = req.body as { videoId?: string };
+        const { title, artist } = req.body as { title?: string; artist?: string };
         const vid = videoId;
         if (!vid) {
             res.status(400).json({ error: 'Video ID or SoundCloud URL required' });
@@ -190,7 +190,8 @@ const downloadYouTube: RequestHandler = async (req, res) => {
         // Return a URL that the client can fetch to download the generated audio file
         const audioUrl = `/api/youtube/download-file/${path.basename(audioPath)}`;
 
-        res.json({
+            const thumbnails = infoJson?.thumbnails;
+            const thumbnailUrl = infoJson?.thumbnail || (Array.isArray(thumbnails) ? thumbnails[thumbnails.length - 1]?.url : scData?.thumbnail || null);
             audioPath: audioUrl,
             thumbnailPath: thumbnailPath || null,
             metadata,
