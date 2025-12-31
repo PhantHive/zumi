@@ -1,5 +1,5 @@
 // server/src/routes/songs.ts
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { songController } from '../controllers/songController.js';
 import auth from '../middlewares/auth.js';
 import multer from 'multer';
@@ -44,12 +44,12 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Debug middleware for uploads: log headers and small metadata to help debug mobile upload failures
-router.options('/', (req, res) => {
+router.options('/', (req: Request, res: Response) => {
     // Allow preflight checks for the upload endpoint
     res.sendStatus(200);
 });
 
-const logUploadRequest = (req, res, next) => {
+const logUploadRequest = (req: Request, res: Response, next: NextFunction) => {
     try {
         console.log('Upload endpoint hit. Headers:', {
             origin: req.headers.origin,
