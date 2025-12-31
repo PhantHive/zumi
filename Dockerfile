@@ -43,17 +43,13 @@ RUN npm install
 COPY dist/ ./dist/
 COPY shared/ ./shared/
 
-# Copy config directory into /app/config so runtime path /app/config/youtube_anon.txt exists
-COPY server/src/config/ ./config/
-
-# Ensure legacy expected filename exists (copy youtube_anon.txt to youtube_anon.txt if present)
-RUN if [ -f ./config/youtube_anon.txt ]; then cp ./config/youtube_anon.txt ./config/youtube_anon.txt; fi
+# Create config directory (will be mounted at runtime)
+RUN mkdir -p /app/config
 
 # Create necessary directories with correct permissions
 RUN mkdir -p /app/uploads/thumbnails /app/data /app/database && \
     chmod -R 775 /app/uploads /app/data /app/database
 
 EXPOSE ${PORT}
-
 
 CMD ["node", "dist/server/src/server.js"]
