@@ -180,13 +180,26 @@ const searchHandler: RequestHandler = async (req, res) => {
 // Download endpoint: simplified to use only yt-dlp with cookies (all other methods removed)
 const downloadHandler: RequestHandler = async (req, res) => {
     try {
-        const { videoId } = req.body;
-        if (!videoId) {
+        const { videoId, cookieText } = req.body as { videoId?: string; cookieText?: string };
+        // If client provided cookie content, save it to disk and use it
+        if (cookieText) {
+            try {
+                const saved = await saveCookiesContent(cookieText);
+                console.log('Saved cookies from request to:', saved);
+            } catch (e: any) {
+                console.warn('Failed to save provided cookies:', e?.message || e);
+                // continue: yt-dlp will try existing cookies too
+            }
+        }
+        const { videoId: _videoId } = { videoId };
+        const vid = _videoId || videoId;
+        const videoIdFinal = vid;
+        if (!videoIdFinal) {
             res.status(400).json({ error: 'Video ID required' });
             return;
         }
 
-        const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        const videoUrl = `https://www.youtube.com/watch?v=${videoIdFinal}`;
         const timestamp = Date.now();
         const tmpDir = os.tmpdir();
 
@@ -247,7 +260,17 @@ const downloadHandler: RequestHandler = async (req, res) => {
 // Stream endpoint: stream audio to client while saving a copy using yt-dlp + ffmpeg tee
 const streamHandler: RequestHandler = async (req, res) => {
     try {
-        const { videoId } = req.body;
+        const { videoId, cookieText } = req.body as { videoId?: string; cookieText?: string };
+        // If client provided cookie content, save it to disk and use it
+        if (cookieText) {
+            try {
+                const saved = await saveCookiesContent(cookieText);
+                console.log('Saved cookies from request to:', saved);
+            } catch (e: any) {
+                console.warn('Failed to save provided cookies:', e?.message || e);
+                // continue: yt-dlp will try existing cookies too
+            }
+        }
         if (!videoId) {
             res.status(400).json({ error: 'Video ID required' });
             return;
@@ -357,10 +380,39 @@ const cookieHealthHandler: RequestHandler = async (req, res) => {
     }
 };
 
+// Upload cookies endpoint (saves cookieText posted in body). Optional secret protection via env YOUTUBE_COOKIE_UPLOAD_SECRET
+const uploadCookiesHandler: RequestHandler = async (req, res) => {
+    try {
+        const secret = process.env.YOUTUBE_COOKIE_UPLOAD_SECRET;
+        if (secret) {
+            const provided = (req.headers['x-upload-secret'] as string) || req.headers['authorization']?.toString().replace(/^Bearer\s+/i, '');
+            if (!provided || provided !== secret) {
+                res.status(401).json({ error: 'Unauthorized' });
+                return;
+            }
+        }
+
+        const { cookieText } = req.body as { cookieText?: string };
+        if (!cookieText) {
+            res.status(400).json({ error: 'cookieText required in body' });
+            return;
+        }
+
+        const dest = await saveCookiesContent(cookieText);
+        // Return health after saving
+        const text = await fs.promises.readFile(dest, 'utf8');
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        res.json({ ok: true, path: dest, linesCount: lines.length });
+    } catch (err: any) {
+        res.status(500).json({ ok: false, error: err?.message || String(err) });
+    }
+};
+
 router.post('/search', searchHandler);
 router.post('/download', downloadHandler);
 router.post('/stream', streamHandler);
 router.get('/cookie-health', cookieHealthHandler);
+router.post('/upload-cookies', uploadCookiesHandler);
 
 export default router;
 
@@ -379,4 +431,32 @@ function getCookiePath(): string | null {
         try { if (p && fs.existsSync(p)) return p; } catch (e) { /* ignore */ }
     }
     return cookieCandidates[0] || null;
+}
+
+// Helper: save cookie file content into container config so yt-dlp can use it
+async function saveCookiesContent(cookieText: string): Promise<string> {
+    // Prefer /app/config (container mount). Fall back to repo config.
+    const destCandidates = [
+        '/app/config/youtube_anon.txt',
+        '/app/config/cookies_anon.txt',
+        path.join(baseDir, '../../config/youtube_anon.txt'),
+        path.join(baseDir, '../../config/cookies_anon.txt')
+    ];
+
+    for (const dest of destCandidates) {
+        try {
+            const dir = path.dirname(dest);
+            await fs.promises.mkdir(dir, { recursive: true });
+            await fs.promises.writeFile(dest, cookieText, 'utf8');
+            console.log('✅ Saved cookies to', dest);
+            // Ensure getCookiePath will pick this file by setting env var
+            process.env.YOUTUBE_COOKIES_PATH = dest;
+            return dest;
+        } catch (e) {
+            // try next
+            console.warn('Could not write cookies to', dest, e?.message || e);
+        }
+    }
+
+    throw new Error('Failed to save cookie file to any destination');
 }
