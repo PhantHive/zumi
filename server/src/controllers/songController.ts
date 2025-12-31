@@ -7,7 +7,6 @@ import * as fs from 'node:fs';
 import { AuthenticatedRequest } from './authController.js';
 import User from '../models/User.js';
 import os from 'os';
-import fetch from 'node-fetch';
 
 type MulterRequest = Request & {
     files?: {
@@ -225,7 +224,7 @@ export class SongController {
                 // Try fetching via HTTP
                 try {
                     const fullUrl = fileUrl.startsWith('/') ? `${process.env.SERVER_PUBLIC_URL || ''}${fileUrl}` : fileUrl;
-                    const resp = await fetch(fullUrl);
+                    const resp = await (globalThis as any).fetch(fullUrl);
                     if (!resp.ok) throw new Error(`Failed to download ${fullUrl}: ${resp.status}`);
                     const buffer = Buffer.from(await resp.arrayBuffer());
                     await fs.promises.writeFile(destPath, buffer);
