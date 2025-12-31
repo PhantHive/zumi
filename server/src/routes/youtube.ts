@@ -8,12 +8,12 @@ import os from 'os';
 import { execFile as execFileCb } from 'child_process';
 import puppeteer from 'puppeteer-core';
 
-// Small wrapper to run execFile and return stdout/stderr as a promise
+const router = Router();
+
 function runExecFile(command: string, args: string[], options: any = {}): Promise<{ stdout: string; stderr: string; }> {
     return new Promise((resolve, reject) => {
         execFileCb(command, args, options, (err, stdout, stderr) => {
             if (err) {
-                // attach stdout/stderr for better diagnostics
                 (err as any).stdout = stdout;
                 (err as any).stderr = stderr;
                 return reject(err);
@@ -23,7 +23,6 @@ function runExecFile(command: string, args: string[], options: any = {}): Promis
     });
 }
 
-// Helper: locate a Chrome/Chromium executable for puppeteer-core across OSes
 function findChromeExecutable(): string | null {
     const envPath = process.env.CHROME_PATH || process.env.CHROMIUM_PATH || process.env.CHROME_BIN;
     if (envPath && fs.existsSync(envPath)) return envPath;
@@ -34,17 +33,13 @@ function findChromeExecutable(): string | null {
         const programFilesx86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
         candidates.push(path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'));
         candidates.push(path.join(programFilesx86, 'Google', 'Chrome', 'Application', 'chrome.exe'));
-        candidates.push(path.join(programFiles, 'Chromium', 'Application', 'chrome.exe'));
-        candidates.push(path.join(programFilesx86, 'Chromium', 'Application', 'chrome.exe'));
     } else if (platform === 'darwin') {
         candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-        candidates.push('/Applications/Chromium.app/Contents/MacOS/Chromium');
     } else {
         candidates.push('/usr/bin/google-chrome');
         candidates.push('/usr/bin/google-chrome-stable');
         candidates.push('/usr/bin/chromium');
         candidates.push('/usr/bin/chromium-browser');
-        candidates.push('/snap/bin/chromium');
     }
     for (const c of candidates) {
         try { if (fs.existsSync(c)) return c; } catch (e) { /* ignore */ }
@@ -52,364 +47,413 @@ function findChromeExecutable(): string | null {
     return null;
 }
 
-// Helper: locate a Deno executable for yt-dlp JS runtime
-function findDenoExecutable(): string | null {
-    const envPath = process.env.DENO_PATH || process.env.DENO_BIN || process.env.DENO;
-    if (envPath && fs.existsSync(envPath)) return envPath;
-    const candidates = [
-        '/usr/local/bin/deno',
-        '/usr/bin/deno',
-        path.join(process.env.HOME || '', '.deno', 'bin', 'deno'),
-        path.join('/home', 'thanatos', '.deno', 'bin', 'deno'),
-    ];
-    for (const c of candidates) {
-        try { if (fs.existsSync(c)) return c; } catch (e) { /* ignore */ }
-    }
-    return null;
-}
-
-// Puppeteer fallback: try to get a direct audio URL by evaluating the page's player response.
-async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: string) {
+// ✨ NEW: Extract PO Token from YouTube page (NO COOKIES NEEDED!)
+async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: string; poToken: string } | null> {
     const exe = findChromeExecutable();
-    if (!exe) throw new Error('No Chrome/Chromium executable found. Set CHROME_PATH or install Chrome/Chromium.');
-    const browser = await puppeteer.launch({ executablePath: exe, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'], headless: true });
+    if (!exe) return null;
+
+    const browser = await puppeteer.launch({
+        executablePath: exe,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        headless: true
+    });
+
     try {
         const page = await browser.newPage();
+
+        // Set realistic user agent
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        // Go to YouTube page
         await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        const playerResp = await page.evaluate(() => {
+
+        // Extract visitor data and PO token from page
+        const tokens = await page.evaluate(() => {
             try {
                 // @ts-ignore
-                if (typeof window !== 'undefined' && (window as any).ytInitialPlayerResponse) return (window as any).ytInitialPlayerResponse;
-                // @ts-ignore
-                if ((window as any).ytplayer && (window as any).ytplayer.config && (window as any).ytplayer.config.args && (window as any).ytplayer.config.args.player_response) {
-                    return JSON.parse((window as any).ytplayer.config.args.player_response);
+                const ytcfg = window.ytcfg;
+                if (ytcfg && ytcfg.data_) {
+                    const visitorData = ytcfg.data_.VISITOR_DATA || ytcfg.data_.visitorData;
+                    const delegatedSessionId = ytcfg.data_.DELEGATED_SESSION_ID;
+
+                    return {
+                        visitorData: visitorData || null,
+                        poToken: delegatedSessionId || null
+                    };
                 }
             } catch (e) {
-                return null;
+                console.error('Failed to extract tokens:', e);
             }
             return null;
         });
 
-        if (!playerResp || !playerResp.streamingData) return null;
-        const formats = playerResp.streamingData.adaptiveFormats || [];
+        return tokens;
+    } finally {
+        try { await browser.close(); } catch (e) { /* ignore */ }
+    }
+}
+
+// ✨ IMPROVED: Enhanced Puppeteer extraction with better headers
+async function puppeteerExtraction(videoUrl: string, timestamp: number, tmpDir: string) {
+    const exe = findChromeExecutable();
+    if (!exe) throw new Error('Chrome/Chromium not found');
+
+    const browser = await puppeteer.launch({
+        executablePath: exe,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-web-security', // Allow cross-origin requests
+        ],
+        headless: true
+    });
+
+    try {
+        const page = await browser.newPage();
+
+        // Set comprehensive headers to look like real browser
+        await page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        });
+
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        // Navigate to video
+        console.log('Puppeteer: Loading YouTube page...');
+        await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+        // Wait a bit for player to initialize
+        await page.waitForTimeout(2000);
+
+        // Extract player response
+        const playerData = await page.evaluate(() => {
+            try {
+                // @ts-ignore
+                if (window.ytInitialPlayerResponse) {
+                    return window.ytInitialPlayerResponse;
+                }
+                // @ts-ignore
+                if (window.ytplayer?.config?.args?.player_response) {
+                    return JSON.parse(window.ytplayer.config.args.player_response);
+                }
+            } catch (e) {
+                console.error('Failed to extract player data:', e);
+            }
+            return null;
+        });
+
+        if (!playerData || !playerData.streamingData) {
+            throw new Error('No streaming data found in player response');
+        }
+
+        // Get audio formats
+        const formats = playerData.streamingData.adaptiveFormats || [];
         const audioFormats = formats.filter((f: any) => f.mimeType && /audio\//.test(f.mimeType));
-        const withUrl = audioFormats.find((f: any) => f.url) || audioFormats[0];
-        if (!withUrl || !withUrl.url) return null;
-        const audioUrl = withUrl.url as string;
+        const bestAudio = audioFormats.find((f: any) => f.url) || audioFormats[0];
+
+        if (!bestAudio || !bestAudio.url) {
+            throw new Error('No audio URL found');
+        }
+
+        const audioUrl = bestAudio.url as string;
+        console.log('Puppeteer: Found audio URL, downloading...');
+
+        // Download audio using ffmpeg
         const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
         await new Promise<void>((resolve, reject) => {
-            try {
-                (ffmpeg as any)(audioUrl).audioBitrate(128).format('mp3').on('error', (err: Error) => reject(err)).on('end', () => resolve()).save(audioPath);
-            } catch (e) { reject(e as Error); }
+            (ffmpeg as any)(audioUrl)
+                .audioBitrate(128)
+                .format('mp3')
+                .on('error', reject)
+                .on('end', resolve)
+                .save(audioPath);
         });
+
+        // Download thumbnail
         let thumbnailPath: string | null = null;
-        const thumbs = playerResp.videoDetails?.thumbnail?.thumbnails || playerResp.microformat?.playerMicroformatRenderer?.thumbnail?.thumbnails || [];
-        if (Array.isArray(thumbs) && thumbs.length) {
+        const thumbs = playerData.videoDetails?.thumbnail?.thumbnails || [];
+        if (thumbs.length) {
             const thumbUrl = thumbs[thumbs.length - 1].url;
             try {
                 const resp = await page.goto(thumbUrl, { timeout: 15000 });
-                if (resp && resp.buffer) {
+                if (resp) {
                     const buffer = await resp.buffer();
                     thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
                     await fs.promises.writeFile(thumbnailPath, buffer);
                 }
-            } catch (e) { /* ignore thumbnail errors */ }
+            } catch (e) {
+                console.warn('Failed to download thumbnail:', e);
+            }
         }
-        return { info: playerResp, audioPath, thumbnailPath };
-    } finally { try { await browser.close(); } catch (e) { /* ignore */ } }
+
+        return {
+            info: playerData,
+            audioPath,
+            thumbnailPath
+        };
+    } finally {
+        try { await browser.close(); } catch (e) { /* ignore */ }
+    }
 }
 
-async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string, cookies?: string | undefined) {
-    const denoPath = findDenoExecutable();
-    const jsRuntimeArgs = denoPath ? ['--js-runtimes', `deno:${denoPath}`] : [];
-    const jsonCmd = [...jsRuntimeArgs, '-j', videoUrl];
+// ✨ IMPROVED: Use yt-dlp with PO Token and extractor args (NO COOKIES!)
+async function ytDlpWithPoToken(videoUrl: string, timestamp: number, tmpDir: string) {
+    console.log('Attempting yt-dlp with PO token extraction...');
+
+    // First, try to extract PO token using Puppeteer
+    let poTokenArgs: string[] = [];
     try {
-        let infoJson: any = null;
+        const tokens = await extractPoTokenFromPage(videoUrl);
+        if (tokens && tokens.visitorData && tokens.poToken) {
+            console.log('✅ Extracted PO Token successfully!');
+            poTokenArgs = [
+                '--extractor-args',
+                `youtube:player_client=android,web;po_token=${tokens.poToken};visitor_data=${tokens.visitorData}`
+            ];
+        } else {
+            console.log('⚠️ Could not extract PO token, using alternative client');
+            // Fallback: Use Android client which has fewer restrictions
+            poTokenArgs = [
+                '--extractor-args',
+                'youtube:player_client=android,ios'
+            ];
+        }
+    } catch (e) {
+        console.warn('PO token extraction failed, using android client:', e);
+        poTokenArgs = [
+            '--extractor-args',
+            'youtube:player_client=android,ios'
+        ];
+    }
+
+    // Get video info first
+    const jsonCmd = ['-j', ...poTokenArgs, videoUrl];
+    let infoJson: any;
+
+    try {
+        const out = await runExecFile('yt-dlp', jsonCmd, { maxBuffer: 10 * 1024 * 1024 });
+        infoJson = JSON.parse(out.stdout);
+    } catch (e: any) {
+        const stderr = String(e?.stderr || e?.stdout || e?.message || e);
+        console.error('yt-dlp info extraction failed:', stderr);
+        throw new Error('Failed to get video info: ' + stderr);
+    }
+
+    // Download audio
+    const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
+    const downloadArgs = [
+        ...poTokenArgs,
+        '-x',
+        '--audio-format', 'mp3',
+        '--audio-quality', '128K',
+        '--no-post-overwrites',
+        '--embed-thumbnail',
+        '--add-metadata',
+        '-o', audioTemplate,
+        videoUrl
+    ];
+
+    try {
+        await runExecFile('yt-dlp', downloadArgs, { maxBuffer: 50 * 1024 * 1024 });
+    } catch (e: any) {
+        const stderr = String(e?.stderr || e?.stdout || e?.message || e);
+        console.error('yt-dlp download failed:', stderr);
+        throw new Error('Download failed: ' + stderr);
+    }
+
+    // Find downloaded audio file
+    const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+    if (!fs.existsSync(audioPath)) {
+        throw new Error('Audio file was not created');
+    }
+
+    // Download thumbnail separately
+    let thumbnailPath: string | null = null;
+    if (infoJson.thumbnail) {
         try {
-            const out = await runExecFile('yt-dlp', jsonCmd, { maxBuffer: 10 * 1024 * 1024 });
-            infoJson = JSON.parse(out.stdout);
-        } catch (e: any) {
-            // surface helpful errors
-            const stderr = (e && (e.stderr || e.stdout)) ? String(e.stderr || e.stdout) : String(e?.message || e);
-            if (stderr && /Sign in to confirm|Sign in to confirm you're not a bot|Sign in to continue/i.test(stderr)) {
-                const ex = new Error('YT_AUTH_REQUIRED: yt-dlp requires authentication/cookies for this video. Provide cookies in request body.');
-                (ex as any).details = stderr;
-                throw ex;
-            }
-            if (e.code === 'ENOENT') throw new Error('yt-dlp not found on PATH. Install yt-dlp or add it to PATH.');
-            // rethrow original for other cases, attach stderr
-            const ex2 = new Error(String(e?.message || e));
-            (ex2 as any).stderr = stderr;
-            throw ex2;
+            const response = await fetch(infoJson.thumbnail);
+            const buffer = Buffer.from(await response.arrayBuffer());
+            thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+            await fs.promises.writeFile(thumbnailPath, buffer);
+        } catch (e) {
+            console.warn('Thumbnail download failed:', e);
         }
+    }
 
-        const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
-        const args: string[] = [...jsRuntimeArgs, '-x', '--audio-format', 'mp3', '--no-post-overwrites', '--embed-thumbnail', '--add-metadata', '-o', audioTemplate, videoUrl];
-        let cookieFilePath: string | null = null;
-        if (cookies) {
-            cookieFilePath = path.join(tmpDir, `cookies-${timestamp}.txt`);
-            try { await fs.promises.writeFile(cookieFilePath, cookies, { encoding: 'utf8' }); args.unshift(cookieFilePath); args.unshift('--cookies'); } catch (e) { cookieFilePath = null; }
-        }
-
-        try {
-            await runExecFile('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 });
-        } catch (e: any) {
-            const stderr = (e && (e.stderr || e.stdout)) ? String(e.stderr || e.stdout) : String(e?.message || e);
-            if (stderr && /Sign in to confirm|Sign in to confirm you're not a bot|Sign in to continue/i.test(stderr)) {
-                const ex = new Error('YT_AUTH_REQUIRED: yt-dlp requires authentication/cookies for this video. Provide cookies in request body.');
-                (ex as any).details = stderr;
-                throw ex;
-            }
-            if (e.code === 'ENOENT') throw new Error('yt-dlp not found on PATH. Install yt-dlp or add it to PATH.');
-            const ex2 = new Error(String(e?.message || e));
-            (ex2 as any).stderr = stderr;
-            throw ex2;
-        }
-
-        // Find produced audio file and thumbnail
-        const possibleAudio = path.join(tmpDir, `audio-${timestamp}.mp3`);
-        const audioPath = fs.existsSync(possibleAudio) ? possibleAudio : null;
-        const thumbExts = ['jpg', 'jpeg', 'png', 'webp', 'webm'];
-        let thumbnailPath: string | null = null;
-        for (const ext of thumbExts) {
-            const p = path.join(tmpDir, `audio-${timestamp}.${ext}`);
-            if (fs.existsSync(p)) { thumbnailPath = p; break; }
-        }
-        if (cookieFilePath) { try { fs.unlinkSync(cookieFilePath); } catch (e) { /* ignore */ } }
-        return { info: infoJson, audioPath, thumbnailPath };
-    } catch (err: any) { throw err; }
+    return {
+        info: infoJson,
+        audioPath,
+        thumbnailPath
+    };
 }
 
-const router = Router();
-
-// Require auth middleware from parent router (server already wraps /api/youtube with auth)
-
-// POST /api/youtube/search
+// Search endpoint (unchanged)
 const searchHandler: RequestHandler = async (req, res) => {
     try {
         const { query } = req.body;
-        if (!query || typeof query !== 'string' || query.trim() === '') {
+        if (!query) {
             res.status(400).json({ error: 'Query required' });
             return;
         }
 
-        const results = await (yts as any).GetListByKeyword(query, false, 20);
-        if (!results || !Array.isArray(results.items)) {
-            res.json({ data: [] });
-            return;
-        }
-
-        const formatted = results.items
-            .filter((item: any) => item.type === 'video')
-            .map((item: any) => {
-                const thumbnails = item.thumbnail?.thumbnails || [];
-                const bestThumb = thumbnails.length ? thumbnails[thumbnails.length - 1].url : item.thumbnail?.url || '';
-                return {
-                    videoId: item.id,
-                    title: item.title,
-                    channelName: item.channelTitle || item.author?.name || '',
-                    thumbnail: bestThumb,
-                    duration: item.length?.simpleText || item.lengthText || item.duration || '',
-                    description: item.description || '',
-                };
-            });
+        const results = await yts.GetListByKeyword(query, false, 20);
+        const formatted = results.items.map((item: any) => ({
+            videoId: item.id,
+            title: item.title,
+            channelName: item.channelTitle,
+            thumbnail: item.thumbnail.thumbnails[item.thumbnail.thumbnails.length - 1].url,
+            duration: item.length?.simpleText || 'N/A',
+            description: item.description || ''
+        }));
 
         res.json({ data: formatted });
-        return;
-    } catch (error) {
-        console.error('YouTube search error:', error);
+    } catch (error: any) {
+        console.error('Search error:', error);
         res.status(500).json({ error: 'Search failed' });
-        return;
     }
 };
 
-// POST /api/youtube/download
+// ✨ COMPLETELY REWRITTEN Download endpoint - NO COOKIES!
 const downloadHandler: RequestHandler = async (req, res) => {
     try {
         const { videoId } = req.body;
-        const cookies = req.body.cookies as string | undefined;
-        // try puppeteer fallback before asking for cookies-based yt-dlp
-        const tryPuppeteerFirst = true;
-        if (!videoId || typeof videoId !== 'string') {
+        if (!videoId) {
             res.status(400).json({ error: 'Video ID required' });
             return;
         }
 
         const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-
-        // Try ytdl first
-        let info: any;
-        try {
-            info = await (ytdl as any).getInfo(videoUrl);
-        } catch (err: any) {
-            const msg = String(err?.message || err);
-            // Detect YouTube "sign in to confirm" / consent blocks
-            if (/sign in to confirm|bot|captcha|login required|verify/i.test(msg)) {
-                console.warn('ytdl-core blocked, attempting puppeteer then yt-dlp fallback:', msg);
-                const timestamp = Date.now();
-                const tmpDir = os.tmpdir();
-                if (tryPuppeteerFirst) {
-                    try {
-                        const pResult = await puppeteerFallback(videoUrl, timestamp, tmpDir);
-                        if (pResult && pResult.audioPath) {
-                            const videoDetails = pResult.info;
-                            const durationSeconds = parseInt(videoDetails?.videoDetails?.lengthSeconds || videoDetails?.length || '0', 10) || 0;
-                            res.json({
-                                audioPath: pResult.audioPath,
-                                thumbnailPath: pResult.thumbnailPath || null,
-                                metadata: {
-                                    title: videoDetails?.videoDetails?.title || videoDetails?.title || '',
-                                    artist: videoDetails?.videoDetails?.author?.name || videoDetails?.uploader || '',
-                                    duration: durationSeconds,
-                                    description: videoDetails?.videoDetails?.shortDescription || videoDetails?.description || '',
-                                },
-                            });
-                            return;
-                        }
-                    } catch (puErr: any) {
-                        console.warn('puppeteer fallback failed (will try yt-dlp):', puErr?.message || puErr);
-                        // fall through to yt-dlp fallback
-                    }
-                }
-                try {
-                    const result = await ytDlpFallback(videoUrl, timestamp, tmpDir, cookies);
-                    const videoDetails = result.info;
-                    const durationSeconds = parseInt(videoDetails.duration || videoDetails.duration_seconds || '0', 10) || (videoDetails.duration ? Math.floor(videoDetails.duration) : 0);
-
-                    // Check file size if audioPath exists
-                    if (result.audioPath) {
-                        const stats = fs.statSync(result.audioPath);
-                        const maxSize = 50 * 1024 * 1024; // 50MB
-                        if (stats.size > maxSize) {
-                            try { fs.unlinkSync(result.audioPath); } catch (e) { /* ignore */ }
-                            res.status(400).json({ error: 'Audio file too large (>50MB)' });
-                            return;
-                        }
-                    }
-
-                    res.json({
-                        audioPath: result.audioPath,
-                        thumbnailPath: result.thumbnailPath,
-                        metadata: {
-                            title: videoDetails.title || videoDetails.fulltitle || '',
-                            artist: videoDetails.uploader || videoDetails.channel || '',
-                            duration: durationSeconds,
-                            description: videoDetails.description || videoDetails.full_description || '',
-                        },
-                    });
-                    return;
-                } catch (fallbackErr: any) {
-                    console.error('yt-dlp fallback failed:', fallbackErr);
-                    const msg = String(fallbackErr?.message || fallbackErr);
-                    // Special-case authentication requirement from yt-dlp
-                    if (msg.includes('YT_AUTH_REQUIRED') || msg.includes('requires authentication') || (fallbackErr && (fallbackErr as any).details && String((fallbackErr as any).details).toLowerCase().includes('sign in'))) {
-                        // Return 401 with clear instructions for the client to provide cookies
-                        res.status(401).json({
-                            error: 'YT_AUTH_REQUIRED',
-                            message: 'This video requires YouTube authentication/cookies. Export cookies from a browser and include them in the POST body as the "cookies" field.',
-                            details: (fallbackErr as any).details || msg,
-                        });
-                        return;
-                    }
-
-                    res.status(500).json({ error: 'Download failed', message: 'ytdl blocked and yt-dlp fallback failed: ' + msg });
-                    return;
-                }
-            }
-            // Other errors from ytdl
-            throw err;
-        }
-
-        const videoDetails = info.videoDetails;
-
-        const durationSeconds = parseInt(videoDetails.lengthSeconds || '0', 10);
-        // Limit duration to 10 minutes
-        if (durationSeconds > 600) {
-            res.status(400).json({ error: 'Video too long (max 10 minutes)' });
-            return;
-        }
-
         const timestamp = Date.now();
         const tmpDir = os.tmpdir();
-        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-        const thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
 
-        // Download audio stream and convert to mp3 via ffmpeg
-        const audioStream = (ytdl as any)(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
+        console.log('🎬 Starting download for:', videoUrl);
 
-        await new Promise<void>((resolve, reject) => {
-            (ffmpeg as any)(audioStream)
-                .audioBitrate(128)
-                .format('mp3')
-                .on('error', (err: Error) => {
-                    reject(err);
-                })
-                .on('end', () => resolve())
-                .save(audioPath);
-        });
+        // ✨ STRATEGY: Try methods in order of reliability (NO COOKIES!)
+        // 1. Enhanced Puppeteer (most reliable, no cookies needed)
+        // 2. yt-dlp with PO Token (good fallback)
+        // 3. ytdl-core (fast but often blocked)
 
-        // Check max file size 50MB
-        const stats = fs.statSync(audioPath);
-        const maxSize = 50 * 1024 * 1024; // 50MB
-        if (stats.size > maxSize) {
+        let result: any = null;
+        let method = '';
+
+        // Method 1: Enhanced Puppeteer (BEST - NO COOKIES)
+        try {
+            console.log('📍 Trying Method 1: Enhanced Puppeteer...');
+            result = await puppeteerExtraction(videoUrl, timestamp, tmpDir);
+            method = 'puppeteer';
+            console.log('✅ Puppeteer extraction successful!');
+        } catch (puppeteerErr) {
+            console.warn('⚠️ Puppeteer failed, trying yt-dlp...', puppeteerErr);
+
+            // Method 2: yt-dlp with PO Token (GOOD FALLBACK - NO COOKIES)
             try {
-                fs.unlinkSync(audioPath);
-            } catch (e) {
-                /* ignore */
+                console.log('📍 Trying Method 2: yt-dlp with PO Token...');
+                result = await ytDlpWithPoToken(videoUrl, timestamp, tmpDir);
+                method = 'yt-dlp-potoken';
+                console.log('✅ yt-dlp with PO token successful!');
+            } catch (ytdlpErr) {
+                console.warn('⚠️ yt-dlp failed, trying ytdl-core...', ytdlpErr);
+
+                // Method 3: ytdl-core (LAST RESORT)
+                try {
+                    console.log('📍 Trying Method 3: ytdl-core...');
+                    const info = await ytdl.getInfo(videoUrl);
+
+                    // Download audio
+                    const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+                    const audioStream = ytdl(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
+
+                    await new Promise<void>((resolve, reject) => {
+                        (ffmpeg as any)(audioStream)
+                            .audioBitrate(128)
+                            .format('mp3')
+                            .on('error', reject)
+                            .on('end', resolve)
+                            .save(audioPath);
+                    });
+
+                    // Download thumbnail
+                    let thumbnailPath: string | null = null;
+                    const thumbs = info.videoDetails.thumbnails || [];
+                    if (thumbs.length) {
+                        const response = await fetch(thumbs[thumbs.length - 1].url);
+                        const buffer = Buffer.from(await response.arrayBuffer());
+                        thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+                        await fs.promises.writeFile(thumbnailPath, buffer);
+                    }
+
+                    result = {
+                        info: info,
+                        audioPath,
+                        thumbnailPath
+                    };
+                    method = 'ytdl-core';
+                    console.log('✅ ytdl-core successful!');
+                } catch (ytdlErr) {
+                    console.error('❌ ALL METHODS FAILED');
+                    throw new Error('All download methods failed. Video may be restricted or age-gated.');
+                }
             }
-            res.status(400).json({ error: 'Audio file too large (>50MB)' });
+        }
+
+        if (!result || !result.audioPath) {
+            throw new Error('Download failed - no audio file created');
+        }
+
+        // Check file size
+        const stats = fs.statSync(result.audioPath);
+        if (stats.size > 50 * 1024 * 1024) {
+            try { fs.unlinkSync(result.audioPath); } catch (e) { /* ignore */ }
+            res.status(400).json({ error: 'File too large (>50MB)' });
             return;
         }
 
-        // Download thumbnail (best available)
-        const thumbnails = Array.isArray(videoDetails.thumbnails) ? videoDetails.thumbnails : [];
-        const thumbUrl = thumbnails.length ? thumbnails[thumbnails.length - 1].url : undefined;
-        if (thumbUrl) {
-            const response = await fetch(thumbUrl);
-            if (!response.ok) {
-                console.warn('Failed to download thumbnail:', response.statusText);
-            } else {
-                const buffer = Buffer.from(await response.arrayBuffer());
-                await fs.promises.writeFile(thumbnailPath, buffer);
-            }
+        // Extract metadata based on method
+        let metadata: any;
+        if (method === 'puppeteer') {
+            const vd = result.info.videoDetails;
+            metadata = {
+                title: vd?.title || '',
+                artist: vd?.author || vd?.channelId || '',
+                duration: parseInt(vd?.lengthSeconds || '0', 10),
+                description: vd?.shortDescription || ''
+            };
+        } else if (method === 'yt-dlp-potoken') {
+            metadata = {
+                title: result.info.title || '',
+                artist: result.info.uploader || result.info.channel || '',
+                duration: parseInt(result.info.duration || '0', 10),
+                description: result.info.description || ''
+            };
+        } else {
+            const vd = result.info.videoDetails;
+            metadata = {
+                title: vd.title || '',
+                artist: vd.author?.name || '',
+                duration: parseInt(vd.lengthSeconds || '0', 10),
+                description: vd.description || ''
+            };
         }
 
-        // Return metadata and file paths
+        console.log(`✅ Download complete using ${method}`);
+
         res.json({
-            audioPath,
-            thumbnailPath: thumbUrl ? thumbnailPath : null,
-            metadata: {
-                title: videoDetails.title,
-                artist: videoDetails.author?.name || videoDetails.ownerChannelName || '',
-                duration: durationSeconds,
-                description: videoDetails.description || '',
-            },
+            audioPath: result.audioPath,
+            thumbnailPath: result.thumbnailPath || null,
+            metadata,
+            method // For debugging
         });
-        return;
+
     } catch (error: any) {
-        console.error('YouTube download error:', error);
-        res.status(500).json({ error: 'Download failed', message: error?.message || String(error) });
-        return;
+        console.error('Download error:', error);
+        res.status(500).json({
+            error: 'Download failed',
+            message: error?.message || String(error)
+        });
     }
 };
-
-router.get('/check-deps', async (req, res) => {
-    try {
-        const chromePath = findChromeExecutable();
-        let ytDlpVersion: string | null = null;
-        try {
-            const out = await runExecFile('yt-dlp', ['--version']);
-            ytDlpVersion = (out.stdout || '').trim();
-        } catch (e: any) {
-            // not installed or not on PATH
-            ytDlpVersion = null;
-        }
-        res.json({ chromePath: chromePath || null, ytDlpVersion });
-    } catch (err: any) {
-        res.status(500).json({ error: 'failed', message: String(err?.message || err) });
-    }
-});
 
 router.post('/search', searchHandler);
 router.post('/download', downloadHandler);

@@ -31,6 +31,10 @@ RUN apt-get update && apt-get install -y \
     curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
     chmod +x /usr/local/bin/yt-dlp && rm -rf /var/lib/apt/lists/*
 
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV CHROME_PATH=/usr/bin/chromium
+
 # Copy package files
 COPY package*.json ./
 RUN npm install
