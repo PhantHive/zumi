@@ -4,8 +4,26 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execFile as execFileCb } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 const router = Router();
+
+// Determine project root and permanent storage paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '../../..');
+const isDev = process.env.NODE_ENV === 'development';
+const PERM_AUDIO_DIR = isDev ? path.join(PROJECT_ROOT, 'public', 'data') : '/app/data';
+const PERM_THUMB_DIR = isDev ? path.join(PROJECT_ROOT, 'public', 'uploads', 'thumbnails') : '/app/uploads/thumbnails';
+
+// Ensure permanent directories exist
+try {
+    fs.mkdirSync(PERM_AUDIO_DIR, { recursive: true });
+    fs.mkdirSync(PERM_THUMB_DIR, { recursive: true });
+} catch (e) {
+    console.warn('Failed to ensure permanent storage dirs:', e);
+}
 
 // Simple in-memory job store for async downloads
 type JobStatus = 'pending' | 'done' | 'failed';
@@ -45,23 +63,25 @@ async function performDownloadTask(videoId?: string, title?: string, artist?: st
     else if (artist) searchQuery = artist;
     searchQuery = searchQuery.trim();
 
-    // 1. YouTube thumbnail
+    // 1. YouTube thumbnail (save into permanent thumbnails folder)
     let youtubeThumbnailPath: string | null = null;
     if (videoId) {
         try {
             const ytThumbUrl = `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-            const response = await fetch(ytThumbUrl);
+            const response = await (globalThis as any).fetch(ytThumbUrl);
+            const thumbBasename = `yt-thumb-${timestamp}.jpg`;
+            const thumbDest = path.join(PERM_THUMB_DIR, thumbBasename);
             if (response.ok) {
                 const buffer = Buffer.from(await response.arrayBuffer());
-                youtubeThumbnailPath = path.join(tmpDir, `yt-thumb-${timestamp}.jpg`);
-                await fs.promises.writeFile(youtubeThumbnailPath, buffer);
+                await fs.promises.writeFile(thumbDest, buffer);
+                youtubeThumbnailPath = thumbDest;
             } else {
                 const ytThumbUrlStd = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-                const response2 = await fetch(ytThumbUrlStd);
+                const response2 = await (globalThis as any).fetch(ytThumbUrlStd);
                 if (response2.ok) {
                     const buffer = Buffer.from(await response2.arrayBuffer());
-                    youtubeThumbnailPath = path.join(tmpDir, `yt-thumb-${timestamp}.jpg`);
-                    await fs.promises.writeFile(youtubeThumbnailPath, buffer);
+                    await fs.promises.writeFile(thumbDest, buffer);
+                    youtubeThumbnailPath = thumbDest;
                 }
             }
         } catch (e: any) {
@@ -86,15 +106,17 @@ async function performDownloadTask(videoId?: string, title?: string, artist?: st
     const scUrl = scData.webpage_url || scData.url;
     if (!scUrl) throw new Error('Song not found on SoundCloud');
 
-    // 3. Download audio from SoundCloud
-    const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+    // 3. DOWNLOAD AUDIO FROM SOUNDCLOUD -> save directly into permanent audio folder
+    const audioBasename = `audio-${timestamp}.mp3`;
+    const audioDest = path.join(PERM_AUDIO_DIR, audioBasename);
+
     try {
         await runExecFile('yt-dlp', [
             '-f', 'bestaudio',
             '--extract-audio',
             '--audio-format', 'mp3',
             '--audio-quality', '128K',
-            '-o', audioPath,
+            '-o', audioDest,
             '--no-warnings',
             scUrl
         ], {
@@ -102,28 +124,38 @@ async function performDownloadTask(videoId?: string, title?: string, artist?: st
             timeout: 120000
         });
     } catch (e: any) {
-        throw new Error('SoundCloud download failed: ' + (e?.message || e));
+        console.error('SoundCloud download failed:', e?.message || e);
+        throw new Error('SoundCloud audio download failed: ' + (e?.message || e));
     }
 
-    if (!fs.existsSync(audioPath)) throw new Error('No audio file created');
+    if (!fs.existsSync(audioDest)) {
+        throw new Error('No audio file created');
+    }
 
-    // 4. Thumbnail fallback
+    console.log('✅ Audio downloaded from SoundCloud to', audioDest);
+
+    // 4. SOUNDCLOUD THUMBNAIL FALLBACK (if YouTube failed) - save to permanent thumbnails folder
     let finalThumbnailPath = youtubeThumbnailPath;
     if (!finalThumbnailPath && scData.thumbnail) {
         try {
-            const response = await fetch(scData.thumbnail);
-            const buffer = Buffer.from(await response.arrayBuffer());
-            finalThumbnailPath = path.join(tmpDir, `sc-thumb-${timestamp}.jpg`);
-            await fs.promises.writeFile(finalThumbnailPath, buffer);
+            const response = await (globalThis as any).fetch(scData.thumbnail);
+            if (response.ok) {
+                const thumbBasename = `sc-thumb-${timestamp}.jpg`;
+                const thumbDest = path.join(PERM_THUMB_DIR, thumbBasename);
+                const buffer = Buffer.from(await response.arrayBuffer());
+                await fs.promises.writeFile(thumbDest, buffer);
+                finalThumbnailPath = thumbDest;
+                console.log('✅ SoundCloud thumbnail downloaded (fallback) to', thumbDest);
+            }
         } catch (e) {
-            // ignore
+            console.warn('⚠️ SoundCloud thumbnail failed');
         }
     }
 
     // 5. Size check
-    const stats = fs.statSync(audioPath);
+    const stats = fs.statSync(audioDest);
     if (stats.size > 50 * 1024 * 1024) {
-        try { fs.unlinkSync(audioPath); } catch (e) { }
+        try { fs.unlinkSync(audioDest); } catch (e) { }
         if (finalThumbnailPath) {
             try { fs.unlinkSync(finalThumbnailPath); } catch (e) { }
         }
@@ -134,8 +166,9 @@ async function performDownloadTask(videoId?: string, title?: string, artist?: st
     const matchQuality = calculateMatchQuality(title || '', scData.title || '', artist);
 
     const result = {
-        audioPath: `/api/youtube/download-file/${path.basename(audioPath)}`,
-        thumbnailPath: finalThumbnailPath ? `/api/youtube/download-file/${path.basename(finalThumbnailPath)}` : null,
+        // Return stable public URLs pointing to permanent storage
+        audioPath: `/data/${path.basename(audioDest)}`,
+        thumbnailPath: finalThumbnailPath ? `/uploads/thumbnails/${path.basename(finalThumbnailPath)}` : null,
         metadata: {
             youtubeTitle: title || 'Unknown',
             soundcloudTitle: scData.title || '',
@@ -365,6 +398,7 @@ const downloadFileHandler = async (req: Request, res: Response): Promise<void> =
             return;
         }
 
+        // The download-file handler still serves temp files; keep behavior for compatibility
         const filepath = path.join(os.tmpdir(), filename);
         if (!fs.existsSync(filepath)) {
             res.status(404).json({ error: 'File not found' });
@@ -381,10 +415,9 @@ const downloadFileHandler = async (req: Request, res: Response): Promise<void> =
         const stream = fs.createReadStream(filepath);
         stream.pipe(res);
 
+        // Do NOT delete the temp file immediately after serving — keep it available for the import endpoint.
         stream.on('end', () => {
-            fs.unlink(filepath, (err) => {
-                if (err) console.error('Delete failed:', err);
-            });
+            console.log('Served temp file (kept for import):', filepath);
         });
 
         stream.on('error', (err) => {

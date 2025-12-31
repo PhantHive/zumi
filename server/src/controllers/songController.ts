@@ -209,38 +209,56 @@ export class SongController {
             }
 
             // Helper to move a temp file into permanent storage; if not present, try downloading
-            const moveOrDownload = async (fileUrl: string, destDir: string, prefix: string) => {
+            const moveOrDownload = async (fileUrl: string, destDir: string) => {
                 const basename = path.basename(fileUrl);
                 const tmpFile = path.join(os.tmpdir(), basename);
                 const ext = path.extname(basename) || '.bin';
                 const newName = `${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`;
                 const destPath = path.join(destDir, newName);
 
-                if (fs.existsSync(tmpFile)) {
-                    await fs.promises.rename(tmpFile, destPath);
-                    return { filename: newName, fullpath: destPath };
+                // First try to move a local tmp file if it exists
+                try {
+                    if (fs.existsSync(tmpFile)) {
+                        await fs.promises.rename(tmpFile, destPath);
+                        console.log('moveOrDownload: moved tmp file to', destPath);
+                        return { filename: newName, fullpath: destPath };
+                    }
+                } catch (moveErr: any) {
+                    console.warn('moveOrDownload: failed to move tmp file', tmpFile, moveErr && moveErr.message ? moveErr.message : moveErr);
+                    // continue to attempt HTTP fetch
                 }
 
-                // Try fetching via HTTP
+                // Build an absolute URL for server-side fetch. Prefer SERVER_PUBLIC_URL, otherwise derive from the incoming request host.
+                const baseUrlCandidate = (process.env.SERVER_PUBLIC_URL || '').replace(/\/$/, '');
+                const derivedHost = `${req.protocol}://${req.get('host')}`;
+                const baseUrl = baseUrlCandidate || derivedHost;
+                const fullUrl = fileUrl.startsWith('/') ? `${baseUrl}${fileUrl}` : fileUrl;
+
                 try {
-                    const fullUrl = fileUrl.startsWith('/') ? `${process.env.SERVER_PUBLIC_URL || ''}${fileUrl}` : fileUrl;
+                    console.log('moveOrDownload: attempting HTTP fetch for', fullUrl);
                     const resp = await (globalThis as any).fetch(fullUrl);
-                    if (!resp.ok) throw new Error(`Failed to download ${fullUrl}: ${resp.status}`);
+                    console.log('moveOrDownload: fetch status', resp && resp.status);
+                    if (!resp || !resp.ok) {
+                        const text = resp ? await resp.text().catch(() => '<no body>') : '<no response>';
+                        throw new Error(`Failed to download ${fullUrl}: ${resp ? resp.status : 'no-response'} ${text}`);
+                    }
                     const buffer = Buffer.from(await resp.arrayBuffer());
                     await fs.promises.writeFile(destPath, buffer);
+                    console.log('moveOrDownload: downloaded and wrote file to', destPath);
                     return { filename: newName, fullpath: destPath };
-                } catch (e: any) {
-                    throw new Error('Failed to move or download file: ' + (e?.message || e));
+                } catch (fetchErr: any) {
+                    console.error('moveOrDownload: HTTP fetch failed for', fullUrl, fetchErr && fetchErr.message ? fetchErr.message : fetchErr);
+                    throw fetchErr;
                 }
             };
 
             // Move audio
             let audioResult;
             try {
-                audioResult = await moveOrDownload(audioPath, baseMusicPath, 'audio');
-            } catch (e: any) {
-                console.error('Audio import failed:', e);
-                res.status(500).json({ error: 'Audio import failed' });
+                audioResult = await moveOrDownload(audioPath, baseMusicPath);
+            } catch (err: any) {
+                console.error('Audio import failed:', err && err.message ? err.message : err);
+                res.status(500).json({ error: 'Audio import failed', detail: err && err.message ? err.message : String(err) });
                 return;
             }
 
@@ -248,14 +266,14 @@ export class SongController {
             let thumbnailFilename: string | undefined = undefined;
             if (thumbnailPath) {
                 try {
-                    const thumbResult = await moveOrDownload(thumbnailPath, baseThumbnailPath, 'thumb');
+                    const thumbResult = await moveOrDownload(thumbnailPath, baseThumbnailPath);
                     thumbnailFilename = thumbResult.filename;
-                } catch (e: any) {
-                    console.warn('Thumbnail import failed, continuing without thumbnail:', e?.message || e);
+                } catch (thumbErr: any) {
+                    console.warn('Thumbnail import failed, continuing without thumbnail:', thumbErr && thumbErr.message ? thumbErr.message : thumbErr);
                 }
             }
 
-            // Determine duration (best effort) using the temp file path we just moved
+            // Determine duration (best effort) using the file path we just moved
             let duration = 0;
             try {
                 duration = Math.floor(await getAudioDurationInSeconds(audioResult.fullpath));
@@ -293,7 +311,7 @@ export class SongController {
             return;
         } catch (error) {
             console.error('Error importing song:', error);
-            res.status(500).json({ error: 'Failed to import song' });
+            res.status(500).json({ error: 'Failed to import song', detail: error && (error as any).message ? (error as any).message : String(error) });
             return;
         }
     };
