@@ -48,138 +48,175 @@ function getInvidiousInstance(): string {
 }
 
 /**
- * Download via Invidious API (NO COOKIES, NO ACCOUNT, NO BAN RISK!)
+ * Download via Invidious API with automatic instance rotation and retry
+ * Tries all 5 instances before giving up (NO COOKIES, NO ACCOUNT, NO BAN RISK!)
  */
 async function downloadViaInvidious(videoId: string, timestamp: number, tmpDir: string) {
-    const instance = getInvidiousInstance();
-    console.log(`🌐 Using Invidious instance: ${instance}`);
+    const maxRetries = INVIDIOUS_INSTANCES.length; // Try all instances
+    let lastError: Error | null = null;
 
-    try {
-        // Get video info from Invidious API
-        const response = await axios.get(`${instance}/api/v1/videos/${videoId}`, {
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-        });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const instance = getInvidiousInstance();
+        console.log(`🌐 Trying Invidious instance ${attempt + 1}/${maxRetries}: ${instance}`);
 
-        const videoData = response.data;
-        console.log('✅ Video info retrieved:', videoData.title);
+        try {
+            // Get video info from Invidious API
+            const response = await axios.get(`${instance}/api/v1/videos/${videoId}`, {
+                timeout: 15000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                },
+            });
 
-        // Find best audio format
-        const audioFormats = videoData.adaptiveFormats.filter((f: any) =>
-            f.type.includes('audio')
-        );
+            const videoData = response.data;
+            console.log('✅ Video info retrieved:', videoData.title);
 
-        if (audioFormats.length === 0) {
-            throw new Error('No audio formats found');
-        }
+            // Find best audio format
+            const audioFormats = videoData.adaptiveFormats.filter((f: any) =>
+                f.type.includes('audio')
+            );
 
-        // Prefer webm/opus or m4a
-        const bestAudio = audioFormats.find((f: any) =>
-            f.container === 'webm' || f.container === 'm4a'
-        ) || audioFormats[0];
-
-        console.log('🎵 Audio format:', bestAudio.container, bestAudio.bitrate);
-
-        // Download audio using ffmpeg
-        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-
-        await new Promise<void>((resolve, reject) => {
-            (ffmpeg as any)(bestAudio.url)
-                .audioBitrate(128)
-                .audioCodec('libmp3lame')
-                .format('mp3')
-                .on('start', (cmd: string) => {
-                    console.log('🎬 FFmpeg started');
-                })
-                .on('progress', (progress: any) => {
-                    if (progress.percent) {
-                        console.log(`📥 Download progress: ${progress.percent.toFixed(0)}%`);
-                    }
-                })
-                .on('error', (err: Error) => {
-                    console.error('❌ FFmpeg error:', err);
-                    reject(err);
-                })
-                .on('end', () => {
-                    console.log('✅ Audio download complete!');
-                    resolve();
-                })
-                .save(audioPath);
-        });
-
-        // Download thumbnail
-        let thumbnailPath: string | null = null;
-
-        if (videoData.videoThumbnails && videoData.videoThumbnails.length > 0) {
-            const thumbnails = videoData.videoThumbnails;
-            const bestThumb = thumbnails[thumbnails.length - 1]; // Highest quality
-
-            try {
-                const thumbResponse = await axios.get(bestThumb.url, {
-                    responseType: 'arraybuffer',
-                    timeout: 10000,
-                });
-
-                thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
-                await fs.promises.writeFile(thumbnailPath, thumbResponse.data);
-                console.log('✅ Thumbnail downloaded!');
-            } catch (thumbError) {
-                console.warn('⚠️ Thumbnail download failed:', thumbError);
+            if (audioFormats.length === 0) {
+                throw new Error('No audio formats found');
             }
-        }
 
-        // Return in same format as other methods
-        return {
-            info: {
-                videoDetails: {
-                    title: videoData.title,
-                    author: videoData.author,
-                    lengthSeconds: videoData.lengthSeconds,
-                    viewCount: videoData.viewCount,
-                    uploadDate: videoData.published,
+            // Prefer webm/opus or m4a
+            const bestAudio = audioFormats.find((f: any) =>
+                f.container === 'webm' || f.container === 'm4a'
+            ) || audioFormats[0];
+
+            console.log('🎵 Audio format:', bestAudio.container, bestAudio.bitrate);
+
+            // Download audio using ffmpeg
+            const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+
+            await new Promise<void>((resolve, reject) => {
+                (ffmpeg as any)(bestAudio.url)
+                    .audioBitrate(128)
+                    .audioCodec('libmp3lame')
+                    .format('mp3')
+                    .on('start', (cmd: string) => {
+                        console.log('🎬 FFmpeg started');
+                    })
+                    .on('progress', (progress: any) => {
+                        if (progress.percent) {
+                            console.log(`📥 Download progress: ${progress.percent.toFixed(0)}%`);
+                        }
+                    })
+                    .on('error', (err: Error) => {
+                        console.error('❌ FFmpeg error:', err);
+                        reject(err);
+                    })
+                    .on('end', () => {
+                        console.log('✅ Audio download complete!');
+                        resolve();
+                    })
+                    .save(audioPath);
+            });
+
+            // Download thumbnail
+            let thumbnailPath: string | null = null;
+
+            if (videoData.videoThumbnails && videoData.videoThumbnails.length > 0) {
+                const thumbnails = videoData.videoThumbnails;
+                const bestThumb = thumbnails[thumbnails.length - 1]; // Highest quality
+
+                try {
+                    const thumbResponse = await axios.get(bestThumb.url, {
+                        responseType: 'arraybuffer',
+                        timeout: 10000,
+                    });
+
+                    thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+                    await fs.promises.writeFile(thumbnailPath, thumbResponse.data);
+                    console.log('✅ Thumbnail downloaded!');
+                } catch (thumbError) {
+                    console.warn('⚠️ Thumbnail download failed:', thumbError);
                 }
-            },
-            audioPath,
-            thumbnailPath,
-        };
-    } catch (error: any) {
-        console.error('❌ Invidious download failed:', error.message);
-        throw error;
+            }
+
+            // SUCCESS! Return result
+            console.log(`✅ Invidious download successful using instance: ${instance}`);
+            return {
+                info: {
+                    videoDetails: {
+                        title: videoData.title,
+                        author: videoData.author,
+                        lengthSeconds: videoData.lengthSeconds,
+                        viewCount: videoData.viewCount,
+                        uploadDate: videoData.published,
+                    }
+                },
+                audioPath,
+                thumbnailPath,
+            };
+
+        } catch (error: any) {
+            lastError = error;
+            const errorMsg = error.response?.status
+                ? `${error.response.status} ${error.response.statusText}`
+                : error.message;
+
+            console.warn(`⚠️ Instance ${instance} failed (${errorMsg}), trying next instance...`);
+
+            // If this was the last attempt, don't continue
+            if (attempt === maxRetries - 1) {
+                console.error(`❌ All ${maxRetries} Invidious instances failed`);
+                break;
+            }
+
+            // Wait a bit before trying next instance (avoid hammering)
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
     }
+
+    // All instances failed
+    throw new Error(`Invidious download failed after trying all ${maxRetries} instances: ${lastError?.message}`);
 }
 
 /**
- * Search via Invidious (optional enhancement for search endpoint)
+ * Search via Invidious with retry (optional enhancement for search endpoint)
  */
 async function searchViaInvidious(query: string, limit: number = 20) {
-    const instance = getInvidiousInstance();
+    const maxRetries = INVIDIOUS_INSTANCES.length;
+    let lastError: Error | null = null;
 
-    try {
-        const response = await axios.get(`${instance}/api/v1/search`, {
-            params: {
-                q: query,
-                type: 'video',
-                page: 1,
-            },
-            timeout: 10000,
-        });
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        const instance = getInvidiousInstance();
 
-        const results = response.data.slice(0, limit).map((video: any) => ({
-            videoId: video.videoId,
-            title: video.title,
-            channelName: video.author,
-            thumbnail: video.videoThumbnails[0]?.url || '',
-            duration: video.lengthSeconds,
-            description: video.description || '',
-        }));
+        try {
+            const response = await axios.get(`${instance}/api/v1/search`, {
+                params: {
+                    q: query,
+                    type: 'video',
+                    page: 1,
+                },
+                timeout: 10000,
+            });
 
-        return results;
-    } catch (error) {
-        console.error('Invidious search failed:', error);
-        throw error;
+            const results = response.data.slice(0, limit).map((video: any) => ({
+                videoId: video.videoId,
+                title: video.title,
+                channelName: video.author,
+                thumbnail: video.videoThumbnails[0]?.url || '',
+                duration: video.lengthSeconds,
+                description: video.description || '',
+            }));
+
+            return results;
+        } catch (error: any) {
+            lastError = error;
+            console.warn(`⚠️ Invidious search failed on ${instance}, trying next...`);
+
+            if (attempt === maxRetries - 1) {
+                break;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
     }
+
+    throw new Error(`Invidious search failed after trying all instances: ${lastError?.message}`);
 }
 
 // ========================================================================
