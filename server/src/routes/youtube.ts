@@ -100,46 +100,76 @@ const searchYouTube: RequestHandler = async (req, res) => {
     }
 };
 
-// downloadYouTube: retained name but downloads from SoundCloud using yt-dlp (no cookies)
+// downloadYouTube: retained name but SEARCHES SoundCloud using title/artist and downloads the found URL
 const downloadYouTube: RequestHandler = async (req, res) => {
     try {
         const { title, artist } = req.body as { title?: string; artist?: string };
-        const vid = videoId;
-        if (!vid) {
-            res.status(400).json({ error: 'Video ID or SoundCloud URL required' });
-            return;
-        }
 
-        let videoUrl = vid;
-        if (!/^https?:\/\//i.test(videoUrl)) {
-            videoUrl = `https://soundcloud.com/${videoUrl}`;
+        // Build search query from title and artist — videoId is from YouTube and must not be used as a SoundCloud path.
+        const searchQuery = `${artist || ''} ${title || ''}`.trim();
+        if (!searchQuery) {
+            res.status(400).json({ error: 'Title or artist required for SoundCloud search' });
+            return;
         }
 
         const timestamp = Date.now();
         const tmpDir = os.tmpdir();
 
-        console.log('🎬 Starting download (SoundCloud) for:', videoUrl);
+        console.log(`🔍 Searching SoundCloud for: "${searchQuery}"`);
 
-        // Get info JSON first
-        let infoJson: any;
+        // Use yt-dlp scsearch1 to find the best matching SoundCloud track
+        let searchOut: string;
         try {
-            infoJson = await getVideoInfo(videoUrl);
-            console.log('✅ info obtained');
+            const out = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], { maxBuffer: 20 * 1024 * 1024 });
+            searchOut = out.stdout;
         } catch (e: any) {
-            console.warn('Info extraction failed:', e?.message || e);
-            // continue; download may still work
+            const stderr = String(e?.stderr || e?.stdout || e?.message || e);
+            console.error('yt-dlp scsearch failed:', stderr);
+            res.status(500).json({ error: 'SoundCloud search failed', message: stderr });
+            return;
         }
 
-        // Download the audio
+        const lines = String(searchOut || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length === 0) {
+            res.status(404).json({ error: 'No results from SoundCloud search' });
+            return;
+        }
+
+        let scData: any;
+        try {
+            scData = JSON.parse(lines[0]);
+        } catch (e: any) {
+            console.error('Failed to parse scsearch output:', e?.message || e);
+            res.status(500).json({ error: 'Failed to parse search result' });
+            return;
+        }
+
+        const scUrl = scData.webpage_url || scData.url || scData.webpage_url_basename || null;
+        if (!scUrl) {
+            res.status(404).json({ error: 'Song not found on SoundCloud' });
+            return;
+        }
+
+        console.log('✅ Found on SoundCloud:', scUrl);
+
+        // Try to fetch rich info from the SoundCloud URL
+        let infoJson: any = null;
+        try {
+            infoJson = await getVideoInfo(scUrl);
+        } catch (e: any) {
+            console.warn('Info extraction failed for SoundCloud URL:', e?.message || e);
+        }
+
+        // Download the audio from the found SoundCloud URL
         const downloadArgs = [
             '-f', 'bestaudio',
             '--extract-audio',
             '--audio-format', 'mp3',
             '--audio-quality', '128K',
             '-o', path.join(tmpDir, `audio-${timestamp}.%(ext)s`),
-            '--no-warnings'
+            '--no-warnings',
+            scUrl
         ];
-        downloadArgs.push(videoUrl);
 
         try {
             await runExecFile('yt-dlp', downloadArgs, { maxBuffer: 200 * 1024 * 1024 });
@@ -160,7 +190,8 @@ const downloadYouTube: RequestHandler = async (req, res) => {
         // Download thumbnail if available
         let thumbnailPath: string | null = null;
         try {
-            const thumbnailUrl = infoJson?.thumbnail || (Array.isArray(infoJson?.thumbnails) ? infoJson.thumbnails[infoJson.thumbnails.length - 1]?.url : null);
+            const thumbnails = infoJson?.thumbnails;
+            const thumbnailUrl = infoJson?.thumbnail || (Array.isArray(thumbnails) ? thumbnails[thumbnails.length - 1]?.url : scData?.thumbnail || null);
             if (thumbnailUrl) {
                 const response = await fetch(thumbnailUrl);
                 const buffer = Buffer.from(await response.arrayBuffer());
@@ -179,10 +210,10 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             return;
         }
 
-        const info = infoJson || {};
+        const info = infoJson || scData || {};
         const metadata = {
             title: info.title || '',
-            artist: info.uploader || info.creator || '',
+            artist: info.uploader || info.uploader_id || info.creator || '',
             duration: parseInt(String(info.duration || '0'), 10) || 0,
             description: info.description || ''
         };
