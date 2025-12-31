@@ -43,6 +43,9 @@ RUN npm install
 COPY dist/ ./dist/
 COPY shared/ ./shared/
 
+# Copy config directory with YouTube cookies
+COPY config/ ./config/
+
 # Create necessary directories with correct permissions
 RUN mkdir -p /app/uploads/thumbnails /app/data /app/database && \
     chmod -R 775 /app/uploads /app/data /app/database

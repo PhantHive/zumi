@@ -1,0 +1,10 @@
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+.youtube.com	TRUE	/	TRUE	0	YSC	sLRgEXfnljE
+.youtube.com	TRUE	/	TRUE	1801275498	VISITOR_PRIVACY_METADATA	CgJGUhIhEh0SGwsMDg8QERITFBUWFxgZGhscHR4fICEiIyQlJiBC
+.youtube.com	TRUE	/	TRUE	1801275491	__Secure-YENID	12.YTE=nb_JKBgRGd3xpV1-xpjJmdmJEm2lxX5bxiNVnZPFmztRnIRg0s-_Fvs57qgY8nMD9Uf_pFKDJmpKVLXch1WICV43WolsTeUVE1hiLAOJDreQEsRW_RiJp5lHY652f1TnaGPMmlWob5GMA0NCvIbukojUAb4rssEr5pqlvDzMNvsKdbcshazFX3mpRr8Dq6TyxVRaQnU1dTOAlmL1_dq824hdduRUmzWp7Tc0O8R1LKGcMFsabC9TpmI94BeM3cUBwDpSQt3DZmkRnYrR8j77S_EHIXVJy_SplG2J30-T-OpSkkyjVNQlWDpEv3ufwATK7S45fcmYQJbtM5UfZQkTNA
+.youtube.com	TRUE	/	TRUE	1801275497	SOCS	CAESEwgDEgk4NDc1MjQ3NDkaAmVuIAEaBgiAz9HKBg
+.youtube.com	TRUE	/	TRUE	1801275489	__Secure-YEC	CgtIbUkzZVY1YW95cyjoj9LKBjInCgJGUhIhEh0SGwsMDg8QERITFBUWFxgZGhscHR4fICEiIyQlJiBC
+.youtube.com	TRUE	/	TRUE	1801707514	PREF	f6=40000000&tz=Europe.Paris&f7=100
