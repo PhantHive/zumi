@@ -3,20 +3,109 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFile as execFileCb, spawn } from 'child_process';
+import { execFile as execFileCb } from 'child_process';
 
-// Resolve directory name in ESM/CommonJS robustly (compiled code may run as ESM where __dirname is undefined)
+// Resolve directory name in ESM/CommonJS
 let baseDir = process.cwd();
 try {
-    // Try ESM resolution
     // @ts-ignore
     baseDir = path.dirname(fileURLToPath(import.meta.url));
 } catch (e) {
-    // Fallback to CommonJS __dirname if available
     if (typeof __dirname !== 'undefined') baseDir = __dirname;
 }
 
 const router = Router();
+
+// ========================================================================
+// CONFIGURATION & RUNTIME DETECTION
+// ========================================================================
+
+const YTDLP_CONFIG = {
+    jsRuntime: 'node',
+    remoteComponents: 'ejs:github',
+    playerClient: 'web',
+    searchTimeout: 30000,
+    downloadTimeout: 120000,
+};
+
+// Detect available JavaScript runtime
+function detectJSRuntime(): string | null {
+    try {
+        execFileCb('node', ['--version'], (err) => {
+            if (!err) console.log('✅ Node.js runtime detected');
+        });
+        return 'node';
+    } catch (e) {
+        try {
+            execFileCb('deno', ['--version'], (err) => {
+                if (!err) console.log('✅ Deno runtime detected');
+            });
+            return 'deno';
+        } catch (e2) {
+            console.warn('⚠️ No JavaScript runtime found. YouTube extraction will fail.');
+            console.warn('⚠️ Install Node.js or Deno for YouTube support.');
+            return null;
+        }
+    }
+}
+
+const availableRuntime = detectJSRuntime();
+
+// ========================================================================
+// SMART MATCHING
+// ========================================================================
+
+function calculateMatchQuality(youtubeTitle: string, soundcloudTitle: string, artist?: string): 'good' | 'uncertain' {
+    if (!youtubeTitle || !soundcloudTitle) return 'uncertain';
+
+    const normalize = (str: string) => str
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const ytNorm = normalize(youtubeTitle);
+    const scNorm = normalize(soundcloudTitle);
+
+    const extractMainTitle = (str: string) => {
+        const parts = str.split(/[-–—([\]]/);
+        return normalize(parts[0]);
+    };
+
+    const ytMain = extractMainTitle(ytNorm);
+    const scMain = extractMainTitle(scNorm);
+
+    if (artist) {
+        const artistNorm = normalize(artist);
+        const ytHasArtist = ytNorm.includes(artistNorm);
+        const scHasArtist = scNorm.includes(artistNorm);
+
+        if (ytHasArtist && !scHasArtist) {
+            return 'uncertain';
+        }
+    }
+
+    const ytWords = new Set(ytMain.split(' ').filter(w => w.length > 2));
+    const scWords = new Set(scMain.split(' ').filter(w => w.length > 2));
+
+    const commonWords = [...ytWords].filter(w => scWords.has(w));
+    const minWords = Math.min(ytWords.size, scWords.size);
+
+    if (minWords > 0) {
+        const overlap = commonWords.length / minWords;
+        if (overlap >= 0.6) return 'good';
+    }
+
+    if (ytMain.includes(scMain) || scMain.includes(ytMain)) {
+        return 'good';
+    }
+
+    if (ytMain === scMain) {
+        return 'good';
+    }
+
+    return 'uncertain';
+}
 
 // ========================================================================
 // HELPERS
@@ -35,89 +124,22 @@ function runExecFile(command: string, args: string[], options: any = {}): Promis
     });
 }
 
-// ========================================================================
-// SMART MATCHING - Compare YouTube title with SoundCloud result
-// ========================================================================
+function buildYtDlpArgs(isYouTube: boolean = false): string[] {
+    const args: string[] = [];
 
-function calculateMatchQuality(youtubeTitle: string, soundcloudTitle: string, artist?: string): 'good' | 'uncertain' {
-    if (!youtubeTitle || !soundcloudTitle) return 'uncertain';
-
-    // Normalize: lowercase, remove special chars, extra spaces
-    const normalize = (str: string) => str
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, ' ')  // Remove special chars except dash
-        .replace(/\s+/g, ' ')        // Collapse spaces
-        .trim();
-
-    const ytNorm = normalize(youtubeTitle);
-    const scNorm = normalize(soundcloudTitle);
-
-    // Extract main song title (before dash, parentheses, brackets)
-    const extractMainTitle = (str: string) => {
-        const parts = str.split(/[-–—([\]]/);
-        return normalize(parts[0]);
-    };
-
-    const ytMain = extractMainTitle(ytNorm);
-    const scMain = extractMainTitle(scNorm);
-
-    // Check 1: If artist is provided, both should contain it
-    if (artist) {
-        const artistNorm = normalize(artist);
-        const ytHasArtist = ytNorm.includes(artistNorm);
-        const scHasArtist = scNorm.includes(artistNorm);
-
-        // If YouTube has artist but SoundCloud doesn't, likely wrong song
-        if (ytHasArtist && !scHasArtist) {
-            return 'uncertain';
-        }
+    if (isYouTube && availableRuntime) {
+        args.push('--js-runtimes', `${availableRuntime}`);
+        args.push('--remote-components', YTDLP_CONFIG.remoteComponents);
+        args.push('--extractor-args', `youtube:player_client=${YTDLP_CONFIG.playerClient}`);
     }
 
-    // Check 2: Main title overlap (at least 60% of words match)
-    const ytWords = new Set(ytMain.split(' ').filter(w => w.length > 2));
-    const scWords = new Set(scMain.split(' ').filter(w => w.length > 2));
-
-    const commonWords = [...ytWords].filter(w => scWords.has(w));
-    const minWords = Math.min(ytWords.size, scWords.size);
-
-    if (minWords > 0) {
-        const overlap = commonWords.length / minWords;
-        if (overlap >= 0.6) return 'good';
-    }
-
-    // Check 3: Direct substring match
-    if (ytMain.includes(scMain) || scMain.includes(ytMain)) {
-        return 'good';
-    }
-
-    // Check 4: Exact match of main titles
-    if (ytMain === scMain) {
-        return 'good';
-    }
-
-    return 'uncertain';
-}
-
-// getVideoInfo: works for SoundCloud via yt-dlp --dump-json
-async function getVideoInfo(videoUrl: string): Promise<any> {
-    try {
-        const { stdout } = await runExecFile('yt-dlp', ['--dump-json', videoUrl], { maxBuffer: 50 * 1024 * 1024 });
-        const lines = String(stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        if (lines.length === 0) return null;
-        if (lines.length === 1) return JSON.parse(lines[0]);
-        return lines.map((l: string) => JSON.parse(l));
-    } catch (e: any) {
-        const stderr = String(e?.stderr || e?.stdout || e?.message || e);
-        console.error('getVideoInfo yt-dlp failed:', stderr);
-        throw new Error('Failed to get info: ' + stderr);
-    }
+    return args;
 }
 
 // ========================================================================
-// ROUTE HANDLERS (SoundCloud via yt-dlp)
+// ROUTE HANDLERS
 // ========================================================================
 
-// searchYouTube: retained name but performs SoundCloud search (scsearch)
 const searchYouTube: RequestHandler = async (req, res) => {
     try {
         const { query } = req.body as { query?: string };
@@ -126,50 +148,106 @@ const searchYouTube: RequestHandler = async (req, res) => {
             return;
         }
 
-        // Search YOUTUBE (not SoundCloud) for pretty thumbnails
-        const searchArg = `ytsearch10:${query}`;
-        let stdout: string;
+        console.log(`🔍 Searching for: "${query}"`);
+
+        // TRY SOUNDCLOUD FIRST
         try {
-            const out = await runExecFile('yt-dlp', ['--dump-json', searchArg], { maxBuffer: 100 * 1024 * 1024 });
-            stdout = out.stdout;
-        } catch (e: any) {
-            const stderr = String(e?.stderr || e?.stdout || e?.message || e);
-            console.error('yt-dlp search failed:', stderr);
-            res.status(500).json({ error: 'Search failed', message: stderr });
-            return;
+            const searchArg = `scsearch10:${query}`;
+            const { stdout } = await runExecFile('yt-dlp', ['--dump-json', searchArg], {
+                maxBuffer: 100 * 1024 * 1024,
+                timeout: YTDLP_CONFIG.searchTimeout
+            });
+
+            const lines = String(stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+            if (lines.length > 0) {
+                const items: any[] = [];
+                for (const line of lines) {
+                    try {
+                        const info = JSON.parse(line);
+                        items.push({
+                            videoId: info.id || info.webpage_url || info.url || null,
+                            title: info.title || '',
+                            channelName: info.uploader || info.uploader_id || '',
+                            thumbnail: info.thumbnail || (info.thumbnails?.length ? info.thumbnails[info.thumbnails.length - 1].url : null),
+                            duration: info.duration ? `${Math.floor(info.duration / 60)}:${String(info.duration % 60).padStart(2, '0')}` : 'N/A',
+                            description: info.description || '',
+                            source: 'soundcloud'
+                        });
+                    } catch (err) {
+                        // ignore
+                    }
+                }
+
+                console.log(`✅ Found ${items.length} results from SoundCloud`);
+                res.json({ data: items, source: 'soundcloud' });
+                return;
+            }
+        } catch (scError: any) {
+            console.warn('⚠️ SoundCloud search failed:', scError.message);
         }
 
-        const lines = String(stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        const items: any[] = [];
-        for (const line of lines) {
+        // FALLBACK TO YOUTUBE
+        if (availableRuntime) {
             try {
-                const info = JSON.parse(line);
-                items.push({
-                    videoId: info.id || info.webpage_url || info.url || null,
-                    title: info.title || '',
-                    channelName: info.uploader || info.channel || info.uploader_id || '',
-                    thumbnail: info.thumbnail || (info.thumbnails && info.thumbnails.length ? info.thumbnails[info.thumbnails.length - 1].url : null),
-                    duration: info.duration ? `${Math.floor(info.duration / 60)}:${String(info.duration % 60).padStart(2, '0')}` : 'N/A',
-                    description: info.description || ''
+                console.log('🔄 Trying YouTube as fallback...');
+                const searchArg = `ytsearch10:${query}`;
+                const ytdlpArgs = ['--dump-json', searchArg, ...buildYtDlpArgs(true)];
+
+                const { stdout } = await runExecFile('yt-dlp', ytdlpArgs, {
+                    maxBuffer: 100 * 1024 * 1024,
+                    timeout: YTDLP_CONFIG.searchTimeout
                 });
-            } catch (err) {
-                // ignore parse errors
+
+                const lines = String(stdout || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                const items: any[] = [];
+
+                for (const line of lines) {
+                    try {
+                        const info = JSON.parse(line);
+                        items.push({
+                            videoId: info.id || '',
+                            title: info.title || '',
+                            channelName: info.uploader || info.channel || '',
+                            thumbnail: info.thumbnail || (info.thumbnails?.length ? info.thumbnails[info.thumbnails.length - 1].url : null),
+                            duration: info.duration ? `${Math.floor(info.duration / 60)}:${String(info.duration % 60).padStart(2, '0')}` : 'N/A',
+                            description: info.description || '',
+                            source: 'youtube'
+                        });
+                    } catch (err) {
+                        // ignore
+                    }
+                }
+
+                console.log(`✅ Found ${items.length} results from YouTube`);
+                res.json({ data: items, source: 'youtube' });
+                return;
+            } catch (ytError: any) {
+                const stderr = String(ytError?.stderr || ytError?.stdout || ytError?.message || '');
+
+                if (stderr.includes('Sign in to confirm')) {
+                    console.warn('⚠️ YouTube blocked (VPS IP detected).');
+                } else {
+                    console.error('❌ YouTube search error:', stderr);
+                }
             }
         }
 
-        res.json({ data: items });
+        res.status(500).json({
+            error: 'Search failed',
+            message: 'Both SoundCloud and YouTube search failed.'
+        });
+
     } catch (error: any) {
         console.error('Search error:', error);
         res.status(500).json({ error: 'Search failed' });
     }
 };
 
-// downloadYouTube: retained name but SEARCHES SoundCloud using title/artist and downloads the found URL
 const downloadYouTube: RequestHandler = async (req, res) => {
     try {
         const { videoId, title, artist } = req.body as { videoId?: string; title?: string; artist?: string };
 
-        // Build search query from title and artist
         let searchQuery = '';
         if (artist && title) {
             searchQuery = `${artist} ${title}`;
@@ -187,27 +265,31 @@ const downloadYouTube: RequestHandler = async (req, res) => {
         const tmpDir = os.tmpdir();
 
         console.log(`🔍 Starting download process...`);
-        console.log(`📹 YouTube video: ${videoId || 'N/A'}`);
+        console.log(`📹 YouTube video ID: ${videoId || 'N/A'}`);
         console.log(`🔍 Searching SoundCloud: "${searchQuery}"`);
 
         let thumbnailPath: string | null = null;
 
-        // 1. Download THUMBNAIL from YouTube (exact one user clicked)
-        if (videoId) {
+        // 1. TRY YOUTUBE THUMBNAIL
+        if (videoId && availableRuntime) {
             try {
-                console.log('📸 Downloading YouTube thumbnail...');
+                console.log('📸 Attempting YouTube thumbnail download...');
                 const ytUrl = videoId.startsWith('http') ? videoId : `https://youtube.com/watch?v=${videoId}`;
                 const thumbTempName = `thumb-yt-${timestamp}`;
-
-                await runExecFile('yt-dlp', [
+                const ytdlpArgs = [
                     '--write-thumbnail',
                     '--skip-download',
                     '--convert-thumbnails', 'jpg',
                     '-o', path.join(tmpDir, thumbTempName),
+                    ...buildYtDlpArgs(true),
                     ytUrl
-                ], { maxBuffer: 20 * 1024 * 1024 });
+                ];
 
-                // Find the created thumbnail file
+                await runExecFile('yt-dlp', ytdlpArgs, {
+                    maxBuffer: 20 * 1024 * 1024,
+                    timeout: 15000
+                });
+
                 const files = await fs.promises.readdir(tmpDir);
                 const thumbFile = files.find(f => f.startsWith(`thumb-yt-${timestamp}`) && f.endsWith('.jpg'));
 
@@ -218,17 +300,24 @@ const downloadYouTube: RequestHandler = async (req, res) => {
                     console.log('✅ YouTube thumbnail downloaded');
                 }
             } catch (thumbError: any) {
-                console.warn('⚠️ Could not download YouTube thumbnail:', thumbError?.message || thumbError);
-                // Continue anyway - will try SoundCloud thumbnail as fallback
+                const stderr = String(thumbError?.stderr || thumbError?.message || '');
+                if (stderr.includes('Sign in to confirm')) {
+                    console.warn('⚠️ YouTube thumbnail blocked (VPS IP)');
+                } else {
+                    console.warn('⚠️ YouTube thumbnail failed:', thumbError?.message);
+                }
             }
         }
 
-        // 2. Search SoundCloud for the song
+        // 2. SEARCH SOUNDCLOUD
         console.log('🔍 Searching SoundCloud...');
         let searchOut: string;
         try {
-            const out = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], { maxBuffer: 20 * 1024 * 1024 });
-            searchOut = out.stdout;
+            const { stdout } = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], {
+                maxBuffer: 20 * 1024 * 1024,
+                timeout: YTDLP_CONFIG.searchTimeout
+            });
+            searchOut = stdout;
         } catch (e: any) {
             const stderr = String(e?.stderr || e?.stdout || e?.message || e);
             console.error('yt-dlp scsearch failed:', stderr);
@@ -260,22 +349,23 @@ const downloadYouTube: RequestHandler = async (req, res) => {
         console.log(`✅ Found on SoundCloud: ${scData.title || scUrl}`);
         console.log(`🎵 Artist: ${scData.uploader || 'Unknown'}`);
 
-        // 3. Download audio from SoundCloud
+        // 3. DOWNLOAD AUDIO
         console.log('⬇️ Downloading audio from SoundCloud...');
         const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
 
-        const downloadArgs = [
-            '-f', 'bestaudio',
-            '--extract-audio',
-            '--audio-format', 'mp3',
-            '--audio-quality', '128K',
-            '-o', audioPath,
-            '--no-warnings',
-            scUrl
-        ];
-
         try {
-            await runExecFile('yt-dlp', downloadArgs, { maxBuffer: 200 * 1024 * 1024 });
+            await runExecFile('yt-dlp', [
+                '-f', 'bestaudio',
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '128K',
+                '-o', audioPath,
+                '--no-warnings',
+                scUrl
+            ], {
+                maxBuffer: 200 * 1024 * 1024,
+                timeout: YTDLP_CONFIG.downloadTimeout
+            });
         } catch (e: any) {
             const stderr = String(e?.stderr || e?.stdout || e?.message || e);
             console.error('yt-dlp download failed:', stderr);
@@ -284,19 +374,19 @@ const downloadYouTube: RequestHandler = async (req, res) => {
         }
 
         if (!fs.existsSync(audioPath)) {
-            console.error('No audio file was created by yt-dlp');
-            res.status(500).json({ error: 'Download failed', message: 'No audio file was created by yt-dlp' });
+            console.error('No audio file created');
+            res.status(500).json({ error: 'Download failed', message: 'No audio file created' });
             return;
         }
 
         console.log('✅ Audio download complete');
 
-        // 4. If no YouTube thumbnail, try SoundCloud thumbnail as fallback
+        // 4. SOUNDCLOUD THUMBNAIL FALLBACK
         if (!thumbnailPath) {
             try {
                 const thumbnailUrl = scData?.thumbnail;
                 if (thumbnailUrl) {
-                    console.log('📸 Downloading SoundCloud thumbnail as fallback...');
+                    console.log('📸 Downloading SoundCloud thumbnail...');
                     const response = await fetch(thumbnailUrl);
                     const buffer = Buffer.from(await response.arrayBuffer());
                     thumbnailPath = path.join(tmpDir, `thumbnail-${timestamp}.jpg`);
@@ -308,18 +398,18 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             }
         }
 
-        // 5. Check file size
+        // 5. CHECK SIZE
         const stats = fs.statSync(audioPath);
         if (stats.size > 50 * 1024 * 1024) {
-            try { fs.unlinkSync(audioPath); } catch (e) { /* ignore */ }
+            try { fs.unlinkSync(audioPath); } catch (e) { }
             if (thumbnailPath) {
-                try { fs.unlinkSync(thumbnailPath); } catch (e) { /* ignore */ }
+                try { fs.unlinkSync(thumbnailPath); } catch (e) { }
             }
             res.status(400).json({ error: 'File too large (>50MB)' });
             return;
         }
 
-        // 6. Calculate match quality using smart algorithm
+        // 6. MATCH QUALITY
         const matchQuality = calculateMatchQuality(
             title || '',
             scData.title || '',
@@ -333,117 +423,33 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             console.log(`   Artist: "${artist}"`);
         }
 
-        // Log warning if match is uncertain
         if (matchQuality === 'uncertain') {
-            console.warn('⚠️ UNCERTAIN MATCH - titles differ significantly');
-            console.warn('   This might be a different version/remix/cover');
+            console.warn('⚠️ UNCERTAIN MATCH');
         }
 
-        // 7. Return file paths and metadata
-        const metadata = {
-            youtubeTitle: title || 'Unknown',
-            soundcloudTitle: scData.title || '',
-            artist: scData.uploader || scData.uploader_id || artist || 'Unknown Artist',
-            duration: parseInt(String(scData.duration || '0'), 10) || 0,
-            description: scData.description || '',
-            matchQuality,
-            thumbnailSource: thumbnailPath ? (thumbnailPath.includes('thumb-yt') ? 'YouTube' : 'SoundCloud') : null
-        };
-
+        // 7. RETURN
         res.json({
             audioPath: `/api/youtube/download-file/${path.basename(audioPath)}`,
             thumbnailPath: thumbnailPath ? `/api/youtube/download-file/${path.basename(thumbnailPath)}` : null,
-            metadata,
+            metadata: {
+                youtubeTitle: title || 'Unknown',
+                soundcloudTitle: scData.title || '',
+                artist: scData.uploader || scData.uploader_id || artist || 'Unknown Artist',
+                duration: parseInt(String(scData.duration || '0'), 10) || 0,
+                description: scData.description || '',
+                matchQuality,
+                thumbnailSource: thumbnailPath ? (thumbnailPath.includes('thumb-yt') ? 'YouTube' : 'SoundCloud') : null
+            },
             source: 'SoundCloud',
-            method: 'yt-dlp-soundcloud'
+            method: 'yt-dlp-soundcloud-2025'
         });
 
     } catch (error: any) {
-        console.error('Download handler unexpected error:', error);
+        console.error('Download handler error:', error);
         res.status(500).json({ error: 'Download failed', message: error?.message || String(error) });
     }
 };
 
-// Stream endpoint: unchanged except removing cookie usage
-const streamHandler: RequestHandler = async (req, res) => {
-    try {
-        const { videoId } = req.body as { videoId?: string };
-        if (!videoId) {
-            res.status(400).json({ error: 'Video ID required' });
-            return;
-        }
-
-        let videoUrl = videoId;
-        if (!/^https?:\/\//i.test(videoUrl)) videoUrl = `https://soundcloud.com/${videoUrl}`;
-
-        const timestamp = Date.now();
-        const tmpDir = os.tmpdir();
-
-        // Get info JSON first (for thumbnail/meta)
-        let infoJson: any = null;
-        try {
-            infoJson = await getVideoInfo(videoUrl);
-        } catch (e: any) {
-            console.warn('yt-dlp info extraction failed (stream):', e?.message || e);
-            // proceed without metadata
-        }
-
-        // Download thumbnail if available
-        let thumbnailPath: string | null = null;
-        const thumbUrl = infoJson?.thumbnail;
-        if (thumbUrl) {
-            try {
-                const resp = await fetch(thumbUrl);
-                const buf = Buffer.from(await resp.arrayBuffer());
-                thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
-                await fs.promises.writeFile(thumbnailPath, buf);
-            } catch (e) {
-                console.warn('Thumbnail download failed (stream):', e);
-            }
-        }
-
-        const outPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-
-        // Spawn yt-dlp to stdout
-        const ytdlp = spawn('yt-dlp', ['-f', 'bestaudio', '-o', '-', '--no-warnings', videoUrl], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-        // Spawn ffmpeg to read from pipe and tee to file + stdout
-        const ffArgs = ['-i', 'pipe:0', '-vn', '-c:a', 'libmp3lame', '-b:a', '128k', '-f', 'tee', `[f=mp3]${outPath}|[f=mp3]pipe:1`];
-        const ff = spawn('ffmpeg', ffArgs, { stdio: ['pipe', 'pipe', 'inherit'] });
-
-        // Pipe yt-dlp -> ffmpeg
-        if (ytdlp.stdout) ytdlp.stdout.pipe(ff.stdin);
-
-        // Stream ffmpeg stdout to response
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Transfer-Encoding', 'chunked');
-
-        if (ff.stdout) {
-            ff.stdout.on('data', (chunk) => {
-                try { res.write(chunk); } catch (e) { /* ignore */ }
-            });
-
-            ff.stdout.on('end', () => {
-                try { res.end(); } catch (e) { /* ignore */ }
-            });
-        }
-
-        // Handle errors and exit
-        ff.on('close', (code) => {
-            console.log('ffmpeg closed with code', code);
-            // Nothing else to do; response ended on end event
-        });
-
-        ytdlp.on('error', (err) => console.warn('yt-dlp spawn error:', err));
-        ff.on('error', (err) => console.warn('ffmpeg spawn error:', err));
-
-    } catch (err: any) {
-        console.error('Stream handler error:', err);
-        res.status(500).json({ error: 'Stream failed', message: err?.message || String(err) });
-    }
-};
-
-// New endpoint: serve temporary downloaded audio files from OS temp dir
 const downloadFileHandler: RequestHandler = async (req, res) => {
     try {
         const { filename } = req.params as { filename?: string };
@@ -452,7 +458,6 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
             return;
         }
 
-        // Allow both audio and thumbnail files
         const isAudio = filename.startsWith('audio-') && filename.endsWith('.mp3');
         const isThumbnail = filename.startsWith('thumbnail-') && filename.endsWith('.jpg');
 
@@ -467,7 +472,6 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
             return;
         }
 
-        // Set appropriate content type
         if (isAudio) {
             res.setHeader('Content-Type', 'audio/mpeg');
             res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -479,7 +483,6 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
         stream.pipe(res);
 
         stream.on('end', () => {
-            // best-effort cleanup after streaming
             fs.unlink(filepath, (err) => {
                 if (err) console.error('Failed to delete temp file:', err);
             });
@@ -487,7 +490,7 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
 
         stream.on('error', (err) => {
             console.error('Error streaming file:', err);
-            try { res.end(); } catch (e) { /* ignore */ }
+            try { res.end(); } catch (e) { }
         });
     } catch (err: any) {
         console.error('download-file handler error:', err);
@@ -495,10 +498,12 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
     }
 };
 
-router.get('/download-file/:filename', downloadFileHandler);
+// ========================================================================
+// ROUTES
+// ========================================================================
 
+router.get('/download-file/:filename', downloadFileHandler);
 router.post('/search', searchYouTube);
 router.post('/download', downloadYouTube);
-router.post('/stream', streamHandler);
 
 export default router;
