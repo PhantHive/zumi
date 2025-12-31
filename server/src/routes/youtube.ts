@@ -327,9 +327,40 @@ const streamHandler: RequestHandler = async (req, res) => {
     }
 };
 
+// Health endpoint to validate cookies file contains required YouTube auth cookies
+const cookieHealthHandler: RequestHandler = async (req, res) => {
+    try {
+        const cookiePath = getCookiePath();
+        if (!cookiePath) {
+            res.status(500).json({ ok: false, message: 'Cookie file not found', path: null });
+            return;
+        }
+
+        const text = await fs.promises.readFile(cookiePath, 'utf8');
+        const required = ['SID', 'HSID', 'SSID', 'SAPISID', 'APISID', 'LOGIN_INFO', 'YSC'];
+        const found = new Set<string>();
+
+        for (const line of text.split(/\r?\n/)) {
+            const l = line.trim();
+            if (!l || l.startsWith('#')) continue;
+            const parts = l.split('\t');
+            if (parts.length >= 7) {
+                const name = parts[5];
+                found.add(name);
+            }
+        }
+
+        const missing = required.filter(r => !found.has(r));
+        res.json({ ok: missing.length === 0, path: cookiePath, found: Array.from(found), missing });
+    } catch (err: any) {
+        res.status(500).json({ ok: false, error: err?.message || String(err) });
+    }
+};
+
 router.post('/search', searchHandler);
 router.post('/download', downloadHandler);
 router.post('/stream', streamHandler);
+router.get('/cookie-health', cookieHealthHandler);
 
 export default router;
 
