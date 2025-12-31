@@ -6,7 +6,7 @@ import { Song, Genre } from '../../../shared/types/common.js';
 import * as fs from 'node:fs';
 import { AuthenticatedRequest } from './authController.js';
 import User from '../models/User.js';
-import os from 'os';
+import { spawnSync } from 'child_process';
 
 type MulterRequest = Request & {
     files?: {
@@ -202,128 +202,149 @@ export class SongController {
             await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
 
             const { audioPath, thumbnailPath } = req.body as { audioPath?: string; thumbnailPath?: string };
-
             if (!audioPath) {
                 res.status(400).json({ error: 'audioPath required' });
                 return;
             }
 
-            // If the provided paths are already permanent URLs (/data/... or /uploads/thumbnails/...),
-            // map them directly to filesystem locations and skip HTTP fetching.
-            const mapPermanentUrlToFs = (urlPath: string): { filename: string; fullpath: string } | null => {
-                try {
-                    const cleaned = urlPath.replace(/^\/+/, ''); // remove leading slash
-                    if (cleaned.startsWith('data/')) {
-                        const filename = path.basename(cleaned);
-                        const full = path.join(baseMusicPath, filename);
-                        if (fs.existsSync(full)) return { filename, fullpath: full };
-                    }
-                    if (cleaned.startsWith('uploads/thumbnails/')) {
-                        const filename = path.basename(cleaned);
-                        const full = path.join(baseThumbnailPath, filename);
-                        if (fs.existsSync(full)) return { filename, fullpath: full };
-                    }
-                } catch (e) {
-                    // ignore and return null to fallback to moveOrDownload
+            // If the path is already a server file (relative or absolute), map it directly
+            const isLocal = audioPath.startsWith('/') || audioPath.startsWith('.') || /^[A-Za-z]:\\/.test(audioPath);
+            if (isLocal) {
+                // try to resolve to existing file
+                const filename = path.basename(audioPath);
+                const candidate = path.join(baseMusicPath, filename);
+                if (fs.existsSync(candidate)) {
+                    const duration = await getAudioDurationInSeconds(candidate).catch(() => 0);
+                    const song: Partial<Song> = {
+                        title: req.body.title || path.parse(filename).name,
+                        artist: req.body.artist || 'Unknown Artist',
+                        duration: Math.floor(duration) || 0,
+                        albumId: req.body.album || 'Unknown Album',
+                        filepath: candidate,
+                        thumbnailUrl: 'placeholder.jpg',
+                        uploadedBy: userEmail,
+                        visibility: req.body.visibility || 'public',
+                        tags: req.body.tags ? (req.body.tags as string).split(',').map(t => t.trim()) : undefined,
+                    };
+                    const newSong = await db.createSong({ ...song, genre: (req.body.genre as Genre) || undefined });
+                    res.status(201).json({ data: newSong });
+                    return;
                 }
-                return null;
-            };
-
-             // Helper to move a temp file into permanent storage; if not present, try downloading
-             const moveOrDownload = async (fileUrl: string, destDir: string) => {
-                const basename = path.basename(fileUrl);
-                const tmpFile = path.join(os.tmpdir(), basename);
-                const ext = path.extname(basename) || '.bin';
-                const newName = `${Date.now()}-${Math.random().toString(36).slice(2,8)}${ext}`;
-                const destPath = path.join(destDir, newName);
-
-                // First try to move a local tmp file if it exists
-                try {
-                    if (fs.existsSync(tmpFile)) {
-                        await fs.promises.rename(tmpFile, destPath);
-                        console.log('moveOrDownload: moved tmp file to', destPath);
-                        return { filename: newName, fullpath: destPath };
-                    }
-                } catch (moveErr: any) {
-                    console.warn('moveOrDownload: failed to move tmp file', tmpFile, moveErr && moveErr.message ? moveErr.message : moveErr);
-                    // continue to attempt HTTP fetch
-                }
-
-                // Build an absolute URL for server-side fetch. Prefer SERVER_PUBLIC_URL, otherwise derive from the incoming request host.
-                const baseUrlCandidate = (process.env.SERVER_PUBLIC_URL || '').replace(/\/$/, '');
-                const derivedHost = `${req.protocol}://${req.get('host')}`;
-                const baseUrl = baseUrlCandidate || derivedHost;
-                const fullUrl = fileUrl.startsWith('/') ? `${baseUrl}${fileUrl}` : fileUrl;
-
-                try {
-                    console.log('moveOrDownload: attempting HTTP fetch for', fullUrl);
-                    const resp = await (globalThis as any).fetch(fullUrl);
-                    console.log('moveOrDownload: fetch status', resp && resp.status);
-                    if (!resp || !resp.ok) {
-                        const text = resp ? await resp.text().catch(() => '<no body>') : '<no response>';
-                        throw new Error(`Failed to download ${fullUrl}: ${resp ? resp.status : 'no-response'} ${text}`);
-                    }
-                    const buffer = Buffer.from(await resp.arrayBuffer());
-                    await fs.promises.writeFile(destPath, buffer);
-                    console.log('moveOrDownload: downloaded and wrote file to', destPath);
-                    return { filename: newName, fullpath: destPath };
-                } catch (fetchErr: any) {
-                    console.error('moveOrDownload: HTTP fetch failed for', fullUrl, fetchErr && fetchErr.message ? fetchErr.message : fetchErr);
-                    throw fetchErr;
-                }
-            };
-
-            // Move audio
-            let audioResult;
-            try {
-                // If audioPath already points to permanent storage, map it directly
-                const mapped = mapPermanentUrlToFs(audioPath);
-                if (mapped) {
-                    audioResult = mapped;
-                } else {
-                    audioResult = await moveOrDownload(audioPath, baseMusicPath);
-                }
-             } catch (err: any) {
-                 console.error('Audio import failed:', err && err.message ? err.message : err);
-                 res.status(500).json({ error: 'Audio import failed', detail: err && err.message ? err.message : String(err) });
-                 return;
-             }
-
-             // Move thumbnail (optional)
-             let thumbnailFilename: string | undefined = undefined;
-             if (thumbnailPath) {
-                 try {
-                    const mappedThumb = mapPermanentUrlToFs(thumbnailPath);
-                    if (mappedThumb) {
-                        thumbnailFilename = mappedThumb.filename;
-                    } else {
-                        const thumbResult = await moveOrDownload(thumbnailPath, baseThumbnailPath);
-                        thumbnailFilename = thumbResult.filename;
-                    }
-                 } catch (thumbErr: any) {
-                     console.warn('Thumbnail import failed, continuing without thumbnail:', thumbErr && thumbErr.message ? thumbErr.message : thumbErr);
-                 }
-             }
-
-            // Determine duration (best effort) using the file path we just moved
-            let duration = 0;
-            try {
-                duration = Math.floor(await getAudioDurationInSeconds(audioResult.fullpath));
-            } catch (e) {
-                console.warn('Failed to read audio duration:', e);
             }
 
-            const tags = req.body.tags
-                ? (req.body.tags as string).split(',').map((t: string) => t.trim())
-                : undefined;
+            // Prepare names
+            const baseName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            let downloadedFileName: string | undefined = undefined;
+            let downloadedThumbName: string | undefined = undefined;
+
+            // Try yt-dlp if available
+            try {
+                const outTemplate = path.join(baseMusicPath, `${baseName}.%(ext)s`);
+                const args = ['-x', '--audio-format', 'mp3', '--no-playlist', '-o', outTemplate, audioPath];
+                const proc = spawnSync('yt-dlp', args, { encoding: 'utf8' });
+                if (!proc.error && proc.status === 0) {
+                    const files = await fs.promises.readdir(baseMusicPath);
+                    downloadedFileName = files.find(f => f.startsWith(baseName + '.'));
+
+                    // Attempt to get metadata JSON (thumbnail URL) and fetch that thumbnail directly.
+                    try {
+                        const jproc = spawnSync('yt-dlp', ['-j', '--no-playlist', audioPath], { encoding: 'utf8' });
+                        if (!jproc.error && jproc.stdout) {
+                            try {
+                                const meta = JSON.parse(jproc.stdout.split('\n').find(Boolean) || jproc.stdout);
+                                const thumbUrl = meta?.thumbnail || meta?.thumbnails?.[0]?.url;
+                                if (thumbUrl) {
+                                    try {
+                                        const tresp = await (globalThis as any).fetch(thumbUrl);
+                                        if (tresp && tresp.ok) {
+                                            const tbuff = Buffer.from(await tresp.arrayBuffer());
+                                            const textExt = path.extname(new URL(thumbUrl).pathname) || '.jpg';
+                                            downloadedThumbName = `${baseName}${textExt}`;
+                                            await fs.promises.writeFile(path.join(baseThumbnailPath, downloadedThumbName), tbuff);
+                                        }
+                                    } catch (tdlErr) {
+                                        console.warn('Failed to download thumbnail from metadata URL:', tdlErr);
+                                    }
+                                }
+                            } catch (parseErr) {
+                                console.warn('Failed to parse yt-dlp JSON metadata:', parseErr);
+                            }
+                        }
+                    } catch (metaErr) {
+                        console.warn('yt-dlp metadata fetch failed:', metaErr);
+                    }
+                } else {
+                    console.warn('yt-dlp not used or failed:', proc.error || proc.status);
+                }
+
+                // If metadata-based thumbnail download didn't run or failed, fall back to --write-thumbnail
+                if (!downloadedThumbName) {
+                    try {
+                        const thumbOut = path.join(baseThumbnailPath, `${baseName}.%(ext)s`);
+                        const targs = ['--write-thumbnail', '--skip-download', '-o', thumbOut, audioPath];
+                        const tproc = spawnSync('yt-dlp', targs, { encoding: 'utf8' });
+                        if (!tproc.error && tproc.status === 0) {
+                            const tfiles = await fs.promises.readdir(baseThumbnailPath);
+                            downloadedThumbName = tfiles.find(f => f.startsWith(baseName + '.'));
+                        }
+                    } catch (tErr) {
+                        console.warn('yt-dlp thumbnail attempt failed:', tErr);
+                    }
+                }
+            } catch (err) {
+                console.warn('yt-dlp run failed or not installed:', err);
+            }
+
+            // If yt-dlp didn't produce an audio file, try HTTP fetch fallback for direct links
+            if (!downloadedFileName) {
+                try {
+                    const resp = await (globalThis as any).fetch(audioPath);
+                    if (!resp || !resp.ok) throw new Error(`fetch failed ${resp ? resp.status : 'no response'}`);
+                    const buffer = Buffer.from(await resp.arrayBuffer());
+                    const ext = path.extname(new URL(audioPath).pathname) || '.mp3';
+                    downloadedFileName = `${baseName}${ext}`;
+                    await fs.promises.writeFile(path.join(baseMusicPath, downloadedFileName), buffer);
+                } catch (fetchErr) {
+                    console.error('Failed to obtain remote audio:', fetchErr && (fetchErr as any).message ? (fetchErr as any).message : fetchErr);
+                    res.status(500).json({ error: 'Failed to download audio. Ensure the URL is accessible or install yt-dlp for remote service support.' });
+                    return;
+                }
+            }
+
+            const audioFullPath = path.join(baseMusicPath, downloadedFileName!);
+
+            // If thumbnailPath provided by client, try to fetch it (prefer client's thumbnail)
+            if (!downloadedThumbName && thumbnailPath) {
+                try {
+                    const resp = await (globalThis as any).fetch(thumbnailPath);
+                    if (resp && resp.ok) {
+                        const buffer = Buffer.from(await resp.arrayBuffer());
+                        const ext = path.extname(new URL(thumbnailPath).pathname) || '.jpg';
+                        downloadedThumbName = `${baseName}${ext}`;
+                        await fs.promises.writeFile(path.join(baseThumbnailPath, downloadedThumbName), buffer);
+                    }
+                } catch (e) {
+                    console.warn('Failed to fetch provided thumbnail:', e);
+                }
+            }
+
+            // Compute duration
+            let duration = 0;
+            try {
+                duration = Math.floor(await getAudioDurationInSeconds(audioFullPath));
+            } catch (e) {
+                console.warn('Failed to compute duration:', e);
+            }
+
+            const tags = req.body.tags ? (req.body.tags as string).split(',').map((t: string) => t.trim()) : undefined;
 
             const song: Partial<Song> = {
-                title: req.body.title || path.parse(audioResult.filename).name,
+                title: req.body.title || path.parse(downloadedFileName!).name,
                 artist: req.body.artist || 'Unknown Artist',
                 duration: duration || 0,
                 albumId: req.body.album || 'Unknown Album',
-                filepath: path.join(baseMusicPath, audioResult.filename),
-                thumbnailUrl: thumbnailFilename || 'placeholder.jpg',
+                filepath: audioFullPath,
+                thumbnailUrl: downloadedThumbName || 'placeholder.jpg',
                 uploadedBy: userEmail,
                 visibility: req.body.visibility || 'public',
                 year: req.body.year ? parseInt(req.body.year) : undefined,
@@ -334,14 +355,10 @@ export class SongController {
                 tags,
             };
 
-            const newSong = await db.createSong({
-                ...song,
-                genre: (req.body.genre as Genre) || undefined,
-            });
-
+            const newSong = await db.createSong({ ...song, genre: (req.body.genre as Genre) || undefined });
             res.status(201).json({ data: newSong });
             return;
-        } catch (error) {
+        } catch (error: unknown) {
             console.error('Error importing song:', error);
             res.status(500).json({ error: 'Failed to import song', detail: error && (error as any).message ? (error as any).message : String(error) });
             return;
@@ -439,9 +456,6 @@ export class SongController {
 
             const isDev = process.env.NODE_ENV === 'development';
             const baseMusicPath = isDev ? './public/data' : '/app/data';
-            const baseThumbnailPath = isDev
-                ? './public/uploads/thumbnails'
-                : '/app/uploads/thumbnails';
 
             const updates: any = {};
 
@@ -475,10 +489,7 @@ export class SongController {
             if (req.body.language) updates.language = req.body.language;
             if (req.body.lyrics) updates.lyrics = req.body.lyrics;
             if (req.body.genre) updates.genre = req.body.genre;
-            if (req.body.tags) updates.tags = req.body.tags
-                .split(',')
-                .map((t: string) => t.trim())
-                .filter(Boolean);
+            // baseThumbnailPath not needed here; thumbnails are handled via multer filename
 
             const updated = await db.updateSong(songId, updates, userEmail);
             if (!updated) {
@@ -604,3 +615,4 @@ export class SongController {
 }
 
 export const songController = new SongController();
+

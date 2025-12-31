@@ -89,8 +89,65 @@ async function performDownloadTask(videoId?: string, title?: string, artist?: st
         }
     }
 
-    // 2. Search SoundCloud
+    // If a YouTube videoId was provided, try downloading audio directly from YouTube first
     let scData: any = null;
+    if (videoId) {
+        try {
+            console.log('Attempting direct YouTube audio download for videoId:', videoId);
+            const audioBasename = `audio-${timestamp}.mp3`;
+            const audioDest = path.join(PERM_AUDIO_DIR, audioBasename);
+
+            // Use yt-dlp to download and convert YouTube audio to mp3
+            await runExecFile('yt-dlp', [
+                '-f', 'bestaudio',
+                '--extract-audio',
+                '--audio-format', 'mp3',
+                '--audio-quality', '128K',
+                '-o', audioDest,
+                '--no-warnings',
+                `https://www.youtube.com/watch?v=${videoId}`
+            ], {
+                maxBuffer: 200 * 1024 * 1024,
+                timeout: 180000
+            });
+
+            if (fs.existsSync(audioDest)) {
+                console.log('✅ YouTube audio downloaded to', audioDest);
+                // Use existing youtube thumbnail if available as final thumbnail
+                let finalThumbnailPath = youtubeThumbnailPath;
+                // Size check
+                const stats = fs.statSync(audioDest);
+                if (stats.size > 50 * 1024 * 1024) {
+                    try { fs.unlinkSync(audioDest); } catch (e) { }
+                    throw new Error('File too large (>50MB)');
+                }
+
+                const matchQuality = calculateMatchQuality(title || '', title || '', artist);
+
+                const result = {
+                    audioPath: `/data/${path.basename(audioDest)}`,
+                    thumbnailPath: finalThumbnailPath ? `/uploads/thumbnails/${path.basename(finalThumbnailPath)}` : null,
+                    metadata: {
+                        youtubeTitle: title || 'Unknown',
+                        soundcloudTitle: '',
+                        artist: artist || 'Unknown',
+                        duration: 0,
+                        description: '',
+                        matchQuality,
+                        thumbnailSource: finalThumbnailPath ? 'YouTube' : null
+                    },
+                    source: 'youtube'
+                };
+
+                return result;
+            }
+        } catch (ytErr: any) {
+            console.warn('Direct YouTube download failed, falling back to SoundCloud search:', ytErr && ytErr.message ? ytErr.message : ytErr);
+            // continue to SoundCloud fallback
+        }
+    }
+
+    // 2. Search SoundCloud
     try {
         const { stdout } = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], {
             maxBuffer: 20 * 1024 * 1024,
