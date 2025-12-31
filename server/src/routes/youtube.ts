@@ -657,7 +657,7 @@ const searchHandler: RequestHandler = async (req, res) => {
     }
 };
 
-// Download endpoint with NEW priority: Invidious → Puppeteer → yt-dlp → ytdl-core
+// Download endpoint: simplified to use only yt-dlp with cookies (all other methods removed)
 const downloadHandler: RequestHandler = async (req, res) => {
     try {
         const { videoId } = req.body;
@@ -670,100 +670,28 @@ const downloadHandler: RequestHandler = async (req, res) => {
         const timestamp = Date.now();
         const tmpDir = os.tmpdir();
 
-        console.log('🎬 Starting download for:', videoUrl);
+        console.log('🎬 Starting download (cookies-only) for:', videoUrl);
 
-        let result: any = null;
-        let method = '';
-
-        // Try methods in sequence (flat structure to avoid nested try/catch mismatches)
+        // Only method: yt-dlp with cookies
+        let result: any;
         try {
-            console.log('📍 Trying Method 1: yt-dlp with Cookies...');
             result = await ytDlpWithCookies(videoUrl, timestamp, tmpDir);
-            method = 'yt-dlp-cookies';
-            console.log('✅ yt-dlp with cookies successful!');
-        } catch (err) {
-            console.warn('⚠️ yt-dlp cookies failed, will try other methods...', err);
-        }
-
-        if (!result) {
-            try {
-                console.log('📍 Trying Method 2: Invidious API...');
-                result = await downloadViaInvidious(videoId, timestamp, tmpDir);
-                method = 'invidious';
-                console.log('✅ Invidious download successful!');
-            } catch (err) {
-                console.warn('⚠️ Invidious failed, will try other methods...', err);
-            }
-        }
-
-        if (!result) {
-            try {
-                console.log('📍 Trying Method 3: yt-dlp with PO Token...');
-                result = await ytDlpWithPoToken(videoUrl, timestamp, tmpDir);
-                method = 'yt-dlp-potoken';
-                console.log('✅ yt-dlp with PO token successful!');
-            } catch (err) {
-                console.warn('⚠️ yt-dlp PO token failed, will try other methods...', err);
-            }
-        }
-
-        if (!result) {
-            try {
-                console.log('📍 Trying Method 4: Enhanced Puppeteer...');
-                result = await puppeteerExtraction(videoUrl, timestamp, tmpDir);
-                method = 'puppeteer';
-                console.log('✅ Puppeteer extraction successful!');
-            } catch (err) {
-                console.warn('⚠️ Puppeteer failed, will try other methods...', err);
-            }
-        }
-
-        if (!result) {
-            try {
-                console.log('📍 Trying Method 5: ytdl-core...');
-                const info = await ytdl.getInfo(videoUrl);
-
-                // Download audio
-                const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-                const audioStream = ytdl(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
-
-                await new Promise<void>((resolve, reject) => {
-                    (ffmpeg as any)(audioStream)
-                        .audioBitrate(128)
-                        .format('mp3')
-                        .on('error', reject)
-                        .on('end', resolve)
-                        .save(audioPath);
-                });
-
-                // Download thumbnail
-                let thumbnailPath: string | null = null;
-                const thumbs = info.videoDetails.thumbnails || [];
-                if (thumbs.length) {
-                    try {
-                        const response = await fetch(thumbs[thumbs.length - 1].url);
-                        const buffer = Buffer.from(await response.arrayBuffer());
-                        thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
-                        await fs.promises.writeFile(thumbnailPath, buffer);
-                    } catch (e) {
-                        console.warn('Thumbnail download failed (ytdl):', e);
-                    }
-                }
-
-                result = {
-                    info: info,
-                    audioPath,
-                    thumbnailPath
-                };
-                method = 'ytdl-core';
-                console.log('✅ ytdl-core successful!');
-            } catch (err) {
-                console.warn('⚠️ ytdl-core failed:', err);
-            }
+            console.log('✅ yt-dlp with cookies returned result');
+        } catch (err: any) {
+            console.error('❌ yt-dlp with cookies failed:', err?.message || err);
+            // Provide actionable hint about cookies
+            res.status(500).json({
+                error: 'Download failed',
+                message: err?.message || String(err),
+                hint: 'Ensure a valid YouTube cookies file is available. Set YOUTUBE_COOKIES_PATH env var or place cookies_anon.txt / youtube_anon.txt in server/src/config and rebuild/mount into /app/config.'
+            });
+            return;
         }
 
         if (!result || !result.audioPath) {
-            throw new Error('Download failed - no audio file created');
+            console.error('No audio file was created by yt-dlp');
+            res.status(500).json({ error: 'Download failed', message: 'No audio file was created by yt-dlp' });
+            return;
         }
 
         // Check file size
@@ -774,48 +702,25 @@ const downloadHandler: RequestHandler = async (req, res) => {
             return;
         }
 
-        // Extract metadata based on method
-        let metadata: any;
-        if (method === 'invidious' || method === 'puppeteer') {
-            const vd = result.info.videoDetails;
-            metadata = {
-                title: vd?.title || '',
-                artist: vd?.author || vd?.channelId || '',
-                duration: parseInt(vd?.lengthSeconds || '0', 10),
-                description: vd?.shortDescription || vd?.uploadDate || ''
-            };
-        } else if (method === 'yt-dlp-potoken' || method === 'yt-dlp-cookies') {
-            metadata = {
-                title: result.info.title || '',
-                artist: result.info.uploader || result.info.channel || '',
-                duration: parseInt(result.info.duration || '0', 10),
-                description: result.info.description || ''
-            };
-        } else {
-            const vd = result.info.videoDetails || {};
-            metadata = {
-                title: vd.title || '',
-                artist: (vd.author && vd.author.name) || vd.author || '',
-                duration: parseInt(vd.lengthSeconds || '0', 10),
-                description: vd.description || ''
-            };
-        }
-
-        console.log(`✅ Download complete using ${method}`);
+        // Try to extract metadata from yt-dlp info JSON
+        const info = result.info || {};
+        const metadata = {
+            title: info.title || info.videoDetails?.title || '',
+            artist: info.uploader || info.channel || info.videoDetails?.author || '',
+            duration: parseInt(String(info.duration || info.videoDetails?.lengthSeconds || '0'), 10) || 0,
+            description: info.description || info.videoDetails?.shortDescription || ''
+        };
 
         res.json({
             audioPath: result.audioPath,
             thumbnailPath: result.thumbnailPath || null,
             metadata,
-            method // For debugging
+            method: 'yt-dlp-cookies'
         });
 
     } catch (error: any) {
-        console.error('Download error:', error);
-        res.status(500).json({
-            error: 'Download failed',
-            message: error?.message || String(error)
-        });
+        console.error('Download handler unexpected error:', error);
+        res.status(500).json({ error: 'Download failed', message: error?.message || String(error) });
     }
 };
 
