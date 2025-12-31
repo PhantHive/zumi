@@ -212,11 +212,22 @@ const downloadHandler: RequestHandler = async (req, res) => {
             console.log('✅ yt-dlp with cookies returned result');
         } catch (err: any) {
             console.error('❌ yt-dlp with cookies failed:', err?.message || err);
-            // Provide actionable hint about cookies
+
+            // Inspect cookie file and include helpful diagnostics
+            const cookiePath = getCookiePath();
+            const cookieHealth = inspectCookieFile(cookiePath);
+
+            // Provide actionable hint about cookies and which ones are missing
             res.status(500).json({
                 error: 'Download failed',
                 message: err?.message || String(err),
-                hint: 'Ensure a valid YouTube cookies file is available. Set YOUTUBE_COOKIES_PATH env var or place cookies_anon.txt / youtube_anon.txt in server/src/config and rebuild/mount into /app/config.'
+                cookiePath: cookieHealth.path,
+                cookieOk: cookieHealth.ok,
+                cookieFound: cookieHealth.found || [],
+                cookieMissing: cookieHealth.missing || [],
+                hint: cookieHealth.ok ?
+                    'Cookies file appears to contain required tokens but yt-dlp still failed. Try exporting cookies using a browser extension (cookies.txt) while signed into YouTube, or run yt-dlp locally with --cookies to validate.' :
+                    'Cookies file is missing required YouTube auth cookies. Export a Netscape cookies.txt from a browser while signed into YouTube (must include SID, HSID, SSID, SAPISID, APISID, LOGIN_INFO). Place it in server/src/config/youtube_anon.txt or /app/config/youtube_anon.txt, or POST it to /upload-cookies.'
             });
             return;
         }
@@ -421,10 +432,15 @@ function getCookiePath(): string | null {
     const cookieEnv = process.env.YOUTUBE_COOKIES_PATH;
     const cookieCandidates = [
         cookieEnv,
+        // Prefer repo-mounted config inside server/src/config so copying files there works during development
+        path.join(baseDir, '../config/youtube_anon.txt'),
+        path.join(baseDir, '../config/youtube_anon.txt'),
+        // Also accept container mount
         '/app/config/youtube_anon.txt',
-        '/app/config/cookies_anon.txt',
+        '/app/config/youtube_anon.txt',
+        // legacy locations
         path.join(baseDir, '../../config/youtube_anon.txt'),
-        path.join(baseDir, '../../config/cookies_anon.txt')
+        path.join(baseDir, '../../config/youtube_anon.txt')
     ].filter(Boolean) as string[];
 
     for (const p of cookieCandidates) {
@@ -433,30 +449,61 @@ function getCookiePath(): string | null {
     return cookieCandidates[0] || null;
 }
 
+// Helper: inspect a cookie file and report missing YouTube auth cookies
+function inspectCookieFile(cookiePath: string | null) {
+    const required = ['SID', 'HSID', 'SSID', 'SAPISID', 'APISID', 'LOGIN_INFO', 'YSC'];
+    if (!cookiePath) return { ok: false, path: null, found: [], missing: required };
+    try {
+        const text = fs.readFileSync(cookiePath, 'utf8');
+        const found = new Set<string>();
+        for (const line of text.split(/\r?\n/)) {
+            const l = line.trim();
+            if (!l || l.startsWith('#')) continue;
+            const parts = l.split('\t');
+            if (parts.length >= 7) {
+                const name = parts[5];
+                found.add(name);
+            } else {
+                // fallback: try space-separated name=value pairs
+                const m = l.match(/(^|\s)([A-Za-z0-9_\-]+)=/);
+                if (m) found.add(m[2]);
+            }
+        }
+        const missing = required.filter(r => !found.has(r));
+        return { ok: missing.length === 0, path: cookiePath, found: Array.from(found), missing };
+    } catch (e: any) {
+        return { ok: false, path: cookiePath, found: [], missing: required, error: e?.message || String(e) };
+    }
+}
+
 // Helper: save cookie file content into container config so yt-dlp can use it
 async function saveCookiesContent(cookieText: string): Promise<string> {
-    // Prefer /app/config (container mount). Fall back to repo config.
+    // Prefer repo config (server/src/config) so copying to src/config works during development. Also write to /app/config if possible.
     const destCandidates = [
+        path.join(baseDir, '../config/youtube_anon.txt'),
+        path.join(baseDir, '../config/youtube_anon.txt'),
         '/app/config/youtube_anon.txt',
-        '/app/config/cookies_anon.txt',
+        '/app/config/youtube_anon.txt',
         path.join(baseDir, '../../config/youtube_anon.txt'),
-        path.join(baseDir, '../../config/cookies_anon.txt')
+        path.join(baseDir, '../../config/youtube_anon.txt')
     ];
 
+    let lastError: any = null;
     for (const dest of destCandidates) {
         try {
             const dir = path.dirname(dest);
             await fs.promises.mkdir(dir, { recursive: true });
             await fs.promises.writeFile(dest, cookieText, 'utf8');
             console.log('✅ Saved cookies to', dest);
-            // Ensure getCookiePath will pick this file by setting env var
+            // Ensure getCookiePath will pick a usable file by setting env var to the first successful destination
             process.env.YOUTUBE_COOKIES_PATH = dest;
             return dest;
         } catch (e: any) {
             // try next
+            lastError = e;
             console.warn('Could not write cookies to', dest, e?.message || e);
         }
     }
 
-    throw new Error('Failed to save cookie file to any destination');
+    throw new Error('Failed to save cookie file to any destination: ' + (lastError?.message || String(lastError)));
 }
