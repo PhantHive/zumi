@@ -103,21 +103,64 @@ const searchYouTube: RequestHandler = async (req, res) => {
 // downloadYouTube: retained name but SEARCHES SoundCloud using title/artist and downloads the found URL
 const downloadYouTube: RequestHandler = async (req, res) => {
     try {
-        const { title, artist } = req.body as { title?: string; artist?: string };
+        const { videoId, title, artist } = req.body as { videoId?: string; title?: string; artist?: string };
 
-        // Build search query from title and artist — videoId is from YouTube and must not be used as a SoundCloud path.
-        const searchQuery = `${artist || ''} ${title || ''}`.trim();
-        if (!searchQuery) {
-            res.status(400).json({ error: 'Title or artist required for SoundCloud search' });
+        // Build search query from title and artist
+        let searchQuery = '';
+        if (artist && title) {
+            searchQuery = `${artist} ${title}`;
+        } else if (title) {
+            searchQuery = title;
+        } else if (artist) {
+            searchQuery = artist;
+        } else {
+            res.status(400).json({ error: 'At least title or artist is required' });
             return;
         }
 
+        searchQuery = searchQuery.trim();
         const timestamp = Date.now();
         const tmpDir = os.tmpdir();
 
-        console.log(`🔍 Searching SoundCloud for: "${searchQuery}"`);
+        console.log(`🔍 Starting download process...`);
+        console.log(`📹 YouTube video: ${videoId || 'N/A'}`);
+        console.log(`🔍 Searching SoundCloud: "${searchQuery}"`);
 
-        // Use yt-dlp scsearch1 to find the best matching SoundCloud track
+        let thumbnailPath: string | null = null;
+
+        // 1. Download THUMBNAIL from YouTube (exact one user clicked)
+        if (videoId) {
+            try {
+                console.log('📸 Downloading YouTube thumbnail...');
+                const ytUrl = videoId.startsWith('http') ? videoId : `https://youtube.com/watch?v=${videoId}`;
+                const thumbTempName = `thumb-yt-${timestamp}`;
+
+                await runExecFile('yt-dlp', [
+                    '--write-thumbnail',
+                    '--skip-download',
+                    '--convert-thumbnails', 'jpg',
+                    '-o', path.join(tmpDir, thumbTempName),
+                    ytUrl
+                ], { maxBuffer: 20 * 1024 * 1024 });
+
+                // Find the created thumbnail file
+                const files = await fs.promises.readdir(tmpDir);
+                const thumbFile = files.find(f => f.startsWith(`thumb-yt-${timestamp}`) && f.endsWith('.jpg'));
+
+                if (thumbFile) {
+                    const finalThumbPath = path.join(tmpDir, `thumbnail-${timestamp}.jpg`);
+                    await fs.promises.rename(path.join(tmpDir, thumbFile), finalThumbPath);
+                    thumbnailPath = finalThumbPath;
+                    console.log('✅ YouTube thumbnail downloaded');
+                }
+            } catch (thumbError: any) {
+                console.warn('⚠️ Could not download YouTube thumbnail:', thumbError?.message || thumbError);
+                // Continue anyway - will try SoundCloud thumbnail as fallback
+            }
+        }
+
+        // 2. Search SoundCloud for the song
+        console.log('🔍 Searching SoundCloud...');
         let searchOut: string;
         try {
             const out = await runExecFile('yt-dlp', ['--dump-json', `scsearch1:${searchQuery}`], { maxBuffer: 20 * 1024 * 1024 });
@@ -150,23 +193,19 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             return;
         }
 
-        console.log('✅ Found on SoundCloud:', scUrl);
+        console.log(`✅ Found on SoundCloud: ${scData.title || scUrl}`);
+        console.log(`🎵 Artist: ${scData.uploader || 'Unknown'}`);
 
-        // Try to fetch rich info from the SoundCloud URL
-        let infoJson: any = null;
-        try {
-            infoJson = await getVideoInfo(scUrl);
-        } catch (e: any) {
-            console.warn('Info extraction failed for SoundCloud URL:', e?.message || e);
-        }
+        // 3. Download audio from SoundCloud
+        console.log('⬇️ Downloading audio from SoundCloud...');
+        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
 
-        // Download the audio from the found SoundCloud URL
         const downloadArgs = [
             '-f', 'bestaudio',
             '--extract-audio',
             '--audio-format', 'mp3',
             '--audio-quality', '128K',
-            '-o', path.join(tmpDir, `audio-${timestamp}.%(ext)s`),
+            '-o', audioPath,
             '--no-warnings',
             scUrl
         ];
@@ -180,51 +219,71 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             return;
         }
 
-        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
         if (!fs.existsSync(audioPath)) {
             console.error('No audio file was created by yt-dlp');
             res.status(500).json({ error: 'Download failed', message: 'No audio file was created by yt-dlp' });
             return;
         }
 
-        // Download thumbnail if available
-        let thumbnailPath: string | null = null;
-        try {
-            const thumbnails = infoJson?.thumbnails;
-            const thumbnailUrl = infoJson?.thumbnail || (Array.isArray(thumbnails) ? thumbnails[thumbnails.length - 1]?.url : scData?.thumbnail || null);
-            if (thumbnailUrl) {
-                const response = await fetch(thumbnailUrl);
-                const buffer = Buffer.from(await response.arrayBuffer());
-                thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
-                await fs.promises.writeFile(thumbnailPath, buffer);
+        console.log('✅ Audio download complete');
+
+        // 4. If no YouTube thumbnail, try SoundCloud thumbnail as fallback
+        if (!thumbnailPath) {
+            try {
+                const thumbnailUrl = scData?.thumbnail;
+                if (thumbnailUrl) {
+                    console.log('📸 Downloading SoundCloud thumbnail as fallback...');
+                    const response = await fetch(thumbnailUrl);
+                    const buffer = Buffer.from(await response.arrayBuffer());
+                    thumbnailPath = path.join(tmpDir, `thumbnail-${timestamp}.jpg`);
+                    await fs.promises.writeFile(thumbnailPath, buffer);
+                    console.log('✅ SoundCloud thumbnail downloaded');
+                }
+            } catch (scThumbError) {
+                console.warn('⚠️ Could not download SoundCloud thumbnail:', scThumbError);
             }
-        } catch (e) {
-            console.warn('Thumbnail download failed:', e);
         }
 
-        // Check file size
+        // 5. Check file size
         const stats = fs.statSync(audioPath);
         if (stats.size > 50 * 1024 * 1024) {
             try { fs.unlinkSync(audioPath); } catch (e) { /* ignore */ }
+            if (thumbnailPath) {
+                try { fs.unlinkSync(thumbnailPath); } catch (e) { /* ignore */ }
+            }
             res.status(400).json({ error: 'File too large (>50MB)' });
             return;
         }
 
-        const info = infoJson || scData || {};
+        // 6. Calculate match quality
+        const youtubeTitle = (title || '').toLowerCase();
+        const soundcloudTitle = (scData.title || '').toLowerCase();
+        const scMainTitle = soundcloudTitle.split('-')[0].trim();
+
+        const matchQuality = youtubeTitle.includes(scMainTitle) || scMainTitle.includes(youtubeTitle)
+            ? 'good'
+            : 'uncertain';
+
+        console.log(`🎯 Match quality: ${matchQuality}`);
+        console.log(`   YouTube: "${title}"`);
+        console.log(`   SoundCloud: "${scData.title}"`);
+
+        // 7. Return file paths and metadata
         const metadata = {
-            title: info.title || '',
-            artist: info.uploader || info.uploader_id || info.creator || '',
-            duration: parseInt(String(info.duration || '0'), 10) || 0,
-            description: info.description || ''
+            youtubeTitle: title || 'Unknown',
+            soundcloudTitle: scData.title || '',
+            artist: scData.uploader || scData.uploader_id || artist || 'Unknown Artist',
+            duration: parseInt(String(scData.duration || '0'), 10) || 0,
+            description: scData.description || '',
+            matchQuality,
+            thumbnailSource: thumbnailPath ? (thumbnailPath.includes('thumb-yt') ? 'YouTube' : 'SoundCloud') : null
         };
 
-        // Return a URL that the client can fetch to download the generated audio file
-        const audioUrl = `/api/youtube/download-file/${path.basename(audioPath)}`;
-
         res.json({
-            audioPath: audioUrl,
-            thumbnailPath: thumbnailPath || null,
+            audioPath: `/api/youtube/download-file/${path.basename(audioPath)}`,
+            thumbnailPath: thumbnailPath ? `/api/youtube/download-file/${path.basename(thumbnailPath)}` : null,
             metadata,
+            source: 'SoundCloud',
             method: 'yt-dlp-soundcloud'
         });
 
@@ -317,7 +376,16 @@ const streamHandler: RequestHandler = async (req, res) => {
 const downloadFileHandler: RequestHandler = async (req, res) => {
     try {
         const { filename } = req.params as { filename?: string };
-        if (!filename || !filename.startsWith('audio-') || !filename.endsWith('.mp3')) {
+        if (!filename) {
+            res.status(400).json({ error: 'Invalid filename' });
+            return;
+        }
+
+        // Allow both audio and thumbnail files
+        const isAudio = filename.startsWith('audio-') && filename.endsWith('.mp3');
+        const isThumbnail = filename.startsWith('thumbnail-') && filename.endsWith('.jpg');
+
+        if (!isAudio && !isThumbnail) {
             res.status(400).json({ error: 'Invalid filename' });
             return;
         }
@@ -328,8 +396,13 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
             return;
         }
 
-        res.setHeader('Content-Type', 'audio/mpeg');
-        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        // Set appropriate content type
+        if (isAudio) {
+            res.setHeader('Content-Type', 'audio/mpeg');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        } else {
+            res.setHeader('Content-Type', 'image/jpeg');
+        }
 
         const stream = fs.createReadStream(filepath);
         stream.pipe(res);
