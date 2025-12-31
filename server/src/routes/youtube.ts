@@ -8,6 +8,7 @@ import os from 'os';
 import { execFile as execFileCb } from 'child_process';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import axios from 'axios'; // ← NEW: For Invidious API
 
 // Add ambient Window declarations for YouTube player globals used inside page.evaluate
 declare global {
@@ -19,6 +20,171 @@ declare global {
 }
 
 const router = Router();
+
+// ========================================================================
+// 🌐 INVIDIOUS API - NEW PRIMARY METHOD (ZERO BAN RISK!)
+// ========================================================================
+
+/**
+ * Invidious public instances (rotate for load balancing)
+ */
+const INVIDIOUS_INSTANCES = [
+    'https://inv.riverside.rocks',
+    'https://invidious.snopyta.org',
+    'https://yewtu.be',
+    'https://invidious.kavin.rocks',
+    'https://vid.puffyan.us',
+];
+
+let currentInstanceIndex = 0;
+
+/**
+ * Get next Invidious instance (rotate)
+ */
+function getInvidiousInstance(): string {
+    const instance = INVIDIOUS_INSTANCES[currentInstanceIndex];
+    currentInstanceIndex = (currentInstanceIndex + 1) % INVIDIOUS_INSTANCES.length;
+    return instance;
+}
+
+/**
+ * Download via Invidious API (NO COOKIES, NO ACCOUNT, NO BAN RISK!)
+ */
+async function downloadViaInvidious(videoId: string, timestamp: number, tmpDir: string) {
+    const instance = getInvidiousInstance();
+    console.log(`🌐 Using Invidious instance: ${instance}`);
+
+    try {
+        // Get video info from Invidious API
+        const response = await axios.get(`${instance}/api/v1/videos/${videoId}`, {
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            },
+        });
+
+        const videoData = response.data;
+        console.log('✅ Video info retrieved:', videoData.title);
+
+        // Find best audio format
+        const audioFormats = videoData.adaptiveFormats.filter((f: any) =>
+            f.type.includes('audio')
+        );
+
+        if (audioFormats.length === 0) {
+            throw new Error('No audio formats found');
+        }
+
+        // Prefer webm/opus or m4a
+        const bestAudio = audioFormats.find((f: any) =>
+            f.container === 'webm' || f.container === 'm4a'
+        ) || audioFormats[0];
+
+        console.log('🎵 Audio format:', bestAudio.container, bestAudio.bitrate);
+
+        // Download audio using ffmpeg
+        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+
+        await new Promise<void>((resolve, reject) => {
+            (ffmpeg as any)(bestAudio.url)
+                .audioBitrate(128)
+                .audioCodec('libmp3lame')
+                .format('mp3')
+                .on('start', (cmd: string) => {
+                    console.log('🎬 FFmpeg started');
+                })
+                .on('progress', (progress: any) => {
+                    if (progress.percent) {
+                        console.log(`📥 Download progress: ${progress.percent.toFixed(0)}%`);
+                    }
+                })
+                .on('error', (err: Error) => {
+                    console.error('❌ FFmpeg error:', err);
+                    reject(err);
+                })
+                .on('end', () => {
+                    console.log('✅ Audio download complete!');
+                    resolve();
+                })
+                .save(audioPath);
+        });
+
+        // Download thumbnail
+        let thumbnailPath: string | null = null;
+
+        if (videoData.videoThumbnails && videoData.videoThumbnails.length > 0) {
+            const thumbnails = videoData.videoThumbnails;
+            const bestThumb = thumbnails[thumbnails.length - 1]; // Highest quality
+
+            try {
+                const thumbResponse = await axios.get(bestThumb.url, {
+                    responseType: 'arraybuffer',
+                    timeout: 10000,
+                });
+
+                thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+                await fs.promises.writeFile(thumbnailPath, thumbResponse.data);
+                console.log('✅ Thumbnail downloaded!');
+            } catch (thumbError) {
+                console.warn('⚠️ Thumbnail download failed:', thumbError);
+            }
+        }
+
+        // Return in same format as other methods
+        return {
+            info: {
+                videoDetails: {
+                    title: videoData.title,
+                    author: videoData.author,
+                    lengthSeconds: videoData.lengthSeconds,
+                    viewCount: videoData.viewCount,
+                    uploadDate: videoData.published,
+                }
+            },
+            audioPath,
+            thumbnailPath,
+        };
+    } catch (error: any) {
+        console.error('❌ Invidious download failed:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Search via Invidious (optional enhancement for search endpoint)
+ */
+async function searchViaInvidious(query: string, limit: number = 20) {
+    const instance = getInvidiousInstance();
+
+    try {
+        const response = await axios.get(`${instance}/api/v1/search`, {
+            params: {
+                q: query,
+                type: 'video',
+                page: 1,
+            },
+            timeout: 10000,
+        });
+
+        const results = response.data.slice(0, limit).map((video: any) => ({
+            videoId: video.videoId,
+            title: video.title,
+            channelName: video.author,
+            thumbnail: video.videoThumbnails[0]?.url || '',
+            duration: video.lengthSeconds,
+            description: video.description || '',
+        }));
+
+        return results;
+    } catch (error) {
+        console.error('Invidious search failed:', error);
+        throw error;
+    }
+}
+
+// ========================================================================
+// EXISTING HELPER FUNCTIONS (Keep as is)
+// ========================================================================
 
 function runExecFile(command: string, args: string[], options: any = {}): Promise<{ stdout: string; stderr: string; }> {
     return new Promise((resolve, reject) => {
@@ -57,7 +223,11 @@ function findChromeExecutable(): string | null {
     return null;
 }
 
-// ✨ NEW: Extract PO Token from YouTube page (NO COOKIES NEEDED!)
+// ========================================================================
+// EXISTING DOWNLOAD METHODS (Keep as fallbacks)
+// ========================================================================
+
+// Extract PO Token from YouTube page (NO COOKIES NEEDED!)
 async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: string; poToken: string } | null> {
     const exe = findChromeExecutable();
     if (!exe) return null;
@@ -94,7 +264,6 @@ async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: 
                     };
                 }
             } catch (e) {
-                // eslint-disable-next-line no-console
                 console.error('Failed to extract tokens:', e);
             }
             return null;
@@ -106,7 +275,7 @@ async function extractPoTokenFromPage(videoUrl: string): Promise<{ visitorData: 
     }
 }
 
-// ✨ IMPROVED: Enhanced Puppeteer extraction with better headers
+// Enhanced Puppeteer extraction with better headers
 async function puppeteerExtraction(videoUrl: string, timestamp: number, tmpDir: string) {
     const exe = findChromeExecutable();
     if (!exe) throw new Error('Chrome/Chromium not found');
@@ -137,8 +306,8 @@ async function puppeteerExtraction(videoUrl: string, timestamp: number, tmpDir: 
         console.log('Puppeteer: Loading YouTube page...');
         await page.goto(videoUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Wait a bit for player to initialize
-        await page.waitForTimeout(2000);
+        // Wait a bit for player to initialize (FIXED: use setTimeout instead of waitForTimeout)
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Extract player response
         const playerData = await page.evaluate(() => {
@@ -151,7 +320,6 @@ async function puppeteerExtraction(videoUrl: string, timestamp: number, tmpDir: 
                     return JSON.parse(w.ytplayer.config.args.player_response);
                 }
             } catch (e) {
-                // eslint-disable-next-line no-console
                 console.error('Failed to extract player data:', e);
             }
             return null;
@@ -211,62 +379,51 @@ async function puppeteerExtraction(videoUrl: string, timestamp: number, tmpDir: 
     }
 }
 
-// ✨ IMPROVED: Use yt-dlp with PO Token and extractor args (NO COOKIES!)
+// yt-dlp with PO Token extraction
 async function ytDlpWithPoToken(videoUrl: string, timestamp: number, tmpDir: string) {
     console.log('Attempting yt-dlp with PO token extraction...');
 
-    // First, try to extract PO token using Puppeteer
-    let poTokenArgs: string[] = [];
-    try {
-        const tokens = await extractPoTokenFromPage(videoUrl);
-        if (tokens && tokens.visitorData && tokens.poToken) {
-            console.log('✅ Extracted PO Token successfully!');
-            poTokenArgs = [
-                '--extractor-args',
-                `youtube:player_client=android,web;po_token=${tokens.poToken};visitor_data=${tokens.visitorData}`
-            ];
-        } else {
-            console.log('⚠️ Could not extract PO token, using alternative client');
-            // Fallback: Use Android client which has fewer restrictions
-            poTokenArgs = [
-                '--extractor-args',
-                'youtube:player_client=android,ios'
-            ];
-        }
-    } catch (e) {
-        console.warn('PO token extraction failed, using android client:', e);
-        poTokenArgs = [
-            '--extractor-args',
-            'youtube:player_client=android,ios'
-        ];
-    }
+    // Try to extract PO token
+    const tokens = await extractPoTokenFromPage(videoUrl);
 
     // Get video info first
-    const jsonCmd = ['-j', ...poTokenArgs, videoUrl];
-    let infoJson: any;
+    const infoArgs = ['--dump-json', '--no-warnings'];
+    if (tokens) {
+        console.log('✅ Using extracted PO token');
+        infoArgs.push('--extractor-args', `youtube:player_client=android,web;po_token=${tokens.poToken};visitor_data=${tokens.visitorData}`);
+    } else {
+        console.log('⚠️ Could not extract PO token, using alternative client');
+        infoArgs.push('--extractor-args', 'youtube:player_client=android,ios');
+    }
+    infoArgs.push(videoUrl);
 
+    let infoJson: any;
     try {
-        const out = await runExecFile('yt-dlp', jsonCmd, { maxBuffer: 10 * 1024 * 1024 });
-        infoJson = JSON.parse(out.stdout);
+        const { stdout } = await runExecFile('yt-dlp', infoArgs);
+        infoJson = JSON.parse(stdout);
     } catch (e: any) {
         const stderr = String(e?.stderr || e?.stdout || e?.message || e);
         console.error('yt-dlp info extraction failed:', stderr);
         throw new Error('Failed to get video info: ' + stderr);
     }
 
-    // Download audio
-    const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
+    // Download the audio
     const downloadArgs = [
-        ...poTokenArgs,
-        '-x',
+        '-f', 'bestaudio',
+        '--extract-audio',
         '--audio-format', 'mp3',
         '--audio-quality', '128K',
-        '--no-post-overwrites',
-        '--embed-thumbnail',
-        '--add-metadata',
-        '-o', audioTemplate,
-        videoUrl
+        '-o', path.join(tmpDir, `audio-${timestamp}.%(ext)s`),
+        '--no-warnings'
     ];
+
+    if (tokens) {
+        downloadArgs.push('--extractor-args', `youtube:player_client=android,web;po_token=${tokens.poToken};visitor_data=${tokens.visitorData}`);
+    } else {
+        downloadArgs.push('--extractor-args', 'youtube:player_client=android,ios');
+    }
+
+    downloadArgs.push(videoUrl);
 
     try {
         await runExecFile('yt-dlp', downloadArgs, { maxBuffer: 50 * 1024 * 1024 });
@@ -302,7 +459,11 @@ async function ytDlpWithPoToken(videoUrl: string, timestamp: number, tmpDir: str
     };
 }
 
-// Search endpoint (unchanged)
+// ========================================================================
+// ENDPOINTS
+// ========================================================================
+
+// Search endpoint (can optionally use Invidious for better reliability)
 const searchHandler: RequestHandler = async (req, res) => {
     try {
         const { query } = req.body;
@@ -311,15 +472,31 @@ const searchHandler: RequestHandler = async (req, res) => {
             return;
         }
 
-        const results = await yts.GetListByKeyword(query, false, 20);
-        const formatted = results.items.map((item: any) => ({
-            videoId: item.id,
-            title: item.title,
-            channelName: item.channelTitle,
-            thumbnail: item.thumbnail.thumbnails[item.thumbnail.thumbnails.length - 1].url,
-            duration: item.length?.simpleText || 'N/A',
-            description: item.description || ''
-        }));
+        // Try Invidious first, fall back to youtube-search-api
+        let formatted;
+        try {
+            const invResults = await searchViaInvidious(query, 20);
+            formatted = invResults.map((item: any) => ({
+                videoId: item.videoId,
+                title: item.title,
+                channelName: item.channelName,
+                thumbnail: item.thumbnail,
+                duration: item.duration ? `${Math.floor(item.duration / 60)}:${String(item.duration % 60).padStart(2, '0')}` : 'N/A',
+                description: item.description || ''
+            }));
+        } catch (invError) {
+            console.warn('Invidious search failed, using youtube-search-api:', invError);
+            // Fallback to original method
+            const results = await yts.GetListByKeyword(query, false, 20);
+            formatted = results.items.map((item: any) => ({
+                videoId: item.id,
+                title: item.title,
+                channelName: item.channelTitle,
+                thumbnail: item.thumbnail.thumbnails[item.thumbnail.thumbnails.length - 1].url,
+                duration: item.length?.simpleText || 'N/A',
+                description: item.description || ''
+            }));
+        }
 
         res.json({ data: formatted });
     } catch (error: any) {
@@ -328,7 +505,7 @@ const searchHandler: RequestHandler = async (req, res) => {
     }
 };
 
-// ✨ COMPLETELY REWRITTEN Download endpoint - NO COOKIES!
+// Download endpoint with NEW priority: Invidious → Puppeteer → yt-dlp → ytdl-core
 const downloadHandler: RequestHandler = async (req, res) => {
     try {
         const { videoId } = req.body;
@@ -343,70 +520,81 @@ const downloadHandler: RequestHandler = async (req, res) => {
 
         console.log('🎬 Starting download for:', videoUrl);
 
-        // ✨ STRATEGY: Try methods in order of reliability (NO COOKIES!)
-        // 1. Enhanced Puppeteer (most reliable, no cookies needed)
-        // 2. yt-dlp with PO Token (good fallback)
-        // 3. ytdl-core (fast but often blocked)
+        // 🎯 NEW PRIORITY ORDER (safest to least safe):
+        // 1. Invidious API (SAFEST - zero ban risk, no cookies)
+        // 2. Puppeteer (good fallback)
+        // 3. yt-dlp with PO token (good fallback)
+        // 4. ytdl-core (last resort)
 
         let result: any = null;
         let method = '';
 
-        // Method 1: Enhanced Puppeteer (BEST - NO COOKIES)
+        // Method 1: Invidious API (NEW - ZERO BAN RISK!)
         try {
-            console.log('📍 Trying Method 1: Enhanced Puppeteer...');
-            result = await puppeteerExtraction(videoUrl, timestamp, tmpDir);
-            method = 'puppeteer';
-            console.log('✅ Puppeteer extraction successful!');
-        } catch (puppeteerErr) {
-            console.warn('⚠️ Puppeteer failed, trying yt-dlp...', puppeteerErr);
+            console.log('📍 Trying Method 1: Invidious API...');
+            result = await downloadViaInvidious(videoId, timestamp, tmpDir);
+            method = 'invidious';
+            console.log('✅ Invidious download successful!');
+        } catch (invidiousErr) {
+            console.warn('⚠️ Invidious failed, trying Puppeteer...', invidiousErr);
 
-            // Method 2: yt-dlp with PO Token (GOOD FALLBACK - NO COOKIES)
+            // Method 2: Enhanced Puppeteer
             try {
-                console.log('📍 Trying Method 2: yt-dlp with PO Token...');
-                result = await ytDlpWithPoToken(videoUrl, timestamp, tmpDir);
-                method = 'yt-dlp-potoken';
-                console.log('✅ yt-dlp with PO token successful!');
-            } catch (ytdlpErr) {
-                console.warn('⚠️ yt-dlp failed, trying ytdl-core...', ytdlpErr);
+                console.log('📍 Trying Method 2: Enhanced Puppeteer...');
+                result = await puppeteerExtraction(videoUrl, timestamp, tmpDir);
+                method = 'puppeteer';
+                console.log('✅ Puppeteer extraction successful!');
+            } catch (puppeteerErr) {
+                console.warn('⚠️ Puppeteer failed, trying yt-dlp...', puppeteerErr);
 
-                // Method 3: ytdl-core (LAST RESORT)
+                // Method 3: yt-dlp with PO Token
                 try {
-                    console.log('📍 Trying Method 3: ytdl-core...');
-                    const info = await ytdl.getInfo(videoUrl);
+                    console.log('📍 Trying Method 3: yt-dlp with PO Token...');
+                    result = await ytDlpWithPoToken(videoUrl, timestamp, tmpDir);
+                    method = 'yt-dlp-potoken';
+                    console.log('✅ yt-dlp with PO token successful!');
+                } catch (ytdlpErr) {
+                    console.warn('⚠️ yt-dlp failed, trying ytdl-core...', ytdlpErr);
 
-                    // Download audio
-                    const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
-                    const audioStream = ytdl(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
+                    // Method 4: ytdl-core (LAST RESORT)
+                    try {
+                        console.log('📍 Trying Method 4: ytdl-core...');
+                        const info = await ytdl.getInfo(videoUrl);
 
-                    await new Promise<void>((resolve, reject) => {
-                        (ffmpeg as any)(audioStream)
-                            .audioBitrate(128)
-                            .format('mp3')
-                            .on('error', reject)
-                            .on('end', resolve)
-                            .save(audioPath);
-                    });
+                        // Download audio
+                        const audioPath = path.join(tmpDir, `audio-${timestamp}.mp3`);
+                        const audioStream = ytdl(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
 
-                    // Download thumbnail
-                    let thumbnailPath: string | null = null;
-                    const thumbs = info.videoDetails.thumbnails || [];
-                    if (thumbs.length) {
-                        const response = await fetch(thumbs[thumbs.length - 1].url);
-                        const buffer = Buffer.from(await response.arrayBuffer());
-                        thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
-                        await fs.promises.writeFile(thumbnailPath, buffer);
+                        await new Promise<void>((resolve, reject) => {
+                            (ffmpeg as any)(audioStream)
+                                .audioBitrate(128)
+                                .format('mp3')
+                                .on('error', reject)
+                                .on('end', resolve)
+                                .save(audioPath);
+                        });
+
+                        // Download thumbnail
+                        let thumbnailPath: string | null = null;
+                        const thumbs = info.videoDetails.thumbnails || [];
+                        if (thumbs.length) {
+                            const response = await fetch(thumbs[thumbs.length - 1].url);
+                            const buffer = Buffer.from(await response.arrayBuffer());
+                            thumbnailPath = path.join(tmpDir, `thumb-${timestamp}.jpg`);
+                            await fs.promises.writeFile(thumbnailPath, buffer);
+                        }
+
+                        result = {
+                            info: info,
+                            audioPath,
+                            thumbnailPath
+                        };
+                        method = 'ytdl-core';
+                        console.log('✅ ytdl-core successful!');
+                    } catch (ytdlErr) {
+                        console.error('❌ ALL METHODS FAILED');
+                        throw new Error('All download methods failed. Video may be restricted or age-gated.');
                     }
-
-                    result = {
-                        info: info,
-                        audioPath,
-                        thumbnailPath
-                    };
-                    method = 'ytdl-core';
-                    console.log('✅ ytdl-core successful!');
-                } catch (ytdlErr) {
-                    console.error('❌ ALL METHODS FAILED');
-                    throw new Error('All download methods failed. Video may be restricted or age-gated.');
                 }
             }
         }
@@ -425,13 +613,13 @@ const downloadHandler: RequestHandler = async (req, res) => {
 
         // Extract metadata based on method
         let metadata: any;
-        if (method === 'puppeteer') {
+        if (method === 'invidious' || method === 'puppeteer') {
             const vd = result.info.videoDetails;
             metadata = {
                 title: vd?.title || '',
                 artist: vd?.author || vd?.channelId || '',
                 duration: parseInt(vd?.lengthSeconds || '0', 10),
-                description: vd?.shortDescription || ''
+                description: vd?.shortDescription || vd?.uploadDate || ''
             };
         } else if (method === 'yt-dlp-potoken') {
             metadata = {
@@ -472,4 +660,3 @@ router.post('/search', searchHandler);
 router.post('/download', downloadHandler);
 
 export default router;
-
