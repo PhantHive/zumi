@@ -8,7 +8,7 @@ import connectDB from './utils/mongoose.js';
 import dotenv from 'dotenv';
 import auth from './middlewares/auth.js';
 import authRoutes from './routes/authRoutes.js';
-import youtubeRoutes from './routes/youtube.js';
+import youtubeRoutes, { downloadFileHandler } from './routes/youtube.js';
 
 // Load environment variables
 dotenv.config();
@@ -48,6 +48,11 @@ app.use('/mobile', express.static('/opt/zumi-mobile/releases'));
 // Routes
 app.use('/api/auth', authRoutes); // Auth routes should be public
 app.use('/api/songs', auth, songRoutes); // Protect song routes with auth middleware
+
+// Mount the file download endpoint as public (no auth) so clients can fetch generated files
+app.get('/api/youtube/download-file/:filename', downloadFileHandler);
+
+// Protect remaining YouTube routes (search/download) with auth middleware
 app.use('/api/youtube', auth, youtubeRoutes); // Protect youtube routes with auth middleware
 
 // Mobile version check endpoint

@@ -337,6 +337,9 @@ const downloadFileHandler: RequestHandler = async (req, res) => {
     }
 };
 
+// Export the handler so server can mount it publicly (no auth) if desired
+export { downloadFileHandler };
+
 // ========================================================================
 // ROUTES
 // ========================================================================
@@ -346,3 +349,4 @@ router.post('/search', searchHandler);
 router.post('/download', downloadHandler);
 
 export default router;
+
