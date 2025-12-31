@@ -52,6 +52,22 @@ function findChromeExecutable(): string | null {
     return null;
 }
 
+// Helper: locate a Deno executable for yt-dlp JS runtime
+function findDenoExecutable(): string | null {
+    const envPath = process.env.DENO_PATH || process.env.DENO_BIN || process.env.DENO;
+    if (envPath && fs.existsSync(envPath)) return envPath;
+    const candidates = [
+        '/usr/local/bin/deno',
+        '/usr/bin/deno',
+        path.join(process.env.HOME || '', '.deno', 'bin', 'deno'),
+        path.join('/home', 'thanatos', '.deno', 'bin', 'deno'),
+    ];
+    for (const c of candidates) {
+        try { if (fs.existsSync(c)) return c; } catch (e) { /* ignore */ }
+    }
+    return null;
+}
+
 // Puppeteer fallback: try to get a direct audio URL by evaluating the page's player response.
 async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: string) {
     const exe = findChromeExecutable();
@@ -105,19 +121,31 @@ async function puppeteerFallback(videoUrl: string, timestamp: number, tmpDir: st
 }
 
 async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string, cookies?: string | undefined) {
-    const jsonCmd = ['-j', videoUrl];
+    const denoPath = findDenoExecutable();
+    const jsRuntimeArgs = denoPath ? ['--js-runtimes', `deno:${denoPath}`] : [];
+    const jsonCmd = [...jsRuntimeArgs, '-j', videoUrl];
     try {
         let infoJson: any = null;
         try {
             const out = await runExecFile('yt-dlp', jsonCmd, { maxBuffer: 10 * 1024 * 1024 });
             infoJson = JSON.parse(out.stdout);
         } catch (e: any) {
+            // surface helpful errors
+            const stderr = (e && (e.stderr || e.stdout)) ? String(e.stderr || e.stdout) : String(e?.message || e);
+            if (stderr && /Sign in to confirm|Sign in to confirm you're not a bot|Sign in to continue/i.test(stderr)) {
+                const ex = new Error('YT_AUTH_REQUIRED: yt-dlp requires authentication/cookies for this video. Provide cookies in request body.');
+                (ex as any).details = stderr;
+                throw ex;
+            }
             if (e.code === 'ENOENT') throw new Error('yt-dlp not found on PATH. Install yt-dlp or add it to PATH.');
-            throw e;
+            // rethrow original for other cases, attach stderr
+            const ex2 = new Error(String(e?.message || e));
+            (ex2 as any).stderr = stderr;
+            throw ex2;
         }
 
         const audioTemplate = path.join(tmpDir, `audio-${timestamp}.%(ext)s`);
-        const args: string[] = ['-x', '--audio-format', 'mp3', '--no-post-overwrites', '--embed-thumbnail', '--add-metadata', '-o', audioTemplate, videoUrl];
+        const args: string[] = [...jsRuntimeArgs, '-x', '--audio-format', 'mp3', '--no-post-overwrites', '--embed-thumbnail', '--add-metadata', '-o', audioTemplate, videoUrl];
         let cookieFilePath: string | null = null;
         if (cookies) {
             cookieFilePath = path.join(tmpDir, `cookies-${timestamp}.txt`);
@@ -127,10 +155,19 @@ async function ytDlpFallback(videoUrl: string, timestamp: number, tmpDir: string
         try {
             await runExecFile('yt-dlp', args, { maxBuffer: 50 * 1024 * 1024 });
         } catch (e: any) {
+            const stderr = (e && (e.stderr || e.stdout)) ? String(e.stderr || e.stdout) : String(e?.message || e);
+            if (stderr && /Sign in to confirm|Sign in to confirm you're not a bot|Sign in to continue/i.test(stderr)) {
+                const ex = new Error('YT_AUTH_REQUIRED: yt-dlp requires authentication/cookies for this video. Provide cookies in request body.');
+                (ex as any).details = stderr;
+                throw ex;
+            }
             if (e.code === 'ENOENT') throw new Error('yt-dlp not found on PATH. Install yt-dlp or add it to PATH.');
-            throw e;
+            const ex2 = new Error(String(e?.message || e));
+            (ex2 as any).stderr = stderr;
+            throw ex2;
         }
 
+        // Find produced audio file and thumbnail
         const possibleAudio = path.join(tmpDir, `audio-${timestamp}.mp3`);
         const audioPath = fs.existsSync(possibleAudio) ? possibleAudio : null;
         const thumbExts = ['jpg', 'jpeg', 'png', 'webp', 'webm'];
@@ -264,7 +301,19 @@ const downloadHandler: RequestHandler = async (req, res) => {
                     return;
                 } catch (fallbackErr: any) {
                     console.error('yt-dlp fallback failed:', fallbackErr);
-                    res.status(500).json({ error: 'Download failed', message: 'ytdl blocked and yt-dlp fallback failed: ' + String(fallbackErr?.message || fallbackErr) });
+                    const msg = String(fallbackErr?.message || fallbackErr);
+                    // Special-case authentication requirement from yt-dlp
+                    if (msg.includes('YT_AUTH_REQUIRED') || msg.includes('requires authentication') || (fallbackErr && (fallbackErr as any).details && String((fallbackErr as any).details).toLowerCase().includes('sign in'))) {
+                        // Return 401 with clear instructions for the client to provide cookies
+                        res.status(401).json({
+                            error: 'YT_AUTH_REQUIRED',
+                            message: 'This video requires YouTube authentication/cookies. Export cookies from a browser and include them in the POST body as the "cookies" field.',
+                            details: (fallbackErr as any).details || msg,
+                        });
+                        return;
+                    }
+
+                    res.status(500).json({ error: 'Download failed', message: 'ytdl blocked and yt-dlp fallback failed: ' + msg });
                     return;
                 }
             }
