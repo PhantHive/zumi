@@ -208,8 +208,29 @@ export class SongController {
                 return;
             }
 
-            // Helper to move a temp file into permanent storage; if not present, try downloading
-            const moveOrDownload = async (fileUrl: string, destDir: string) => {
+            // If the provided paths are already permanent URLs (/data/... or /uploads/thumbnails/...),
+            // map them directly to filesystem locations and skip HTTP fetching.
+            const mapPermanentUrlToFs = (urlPath: string): { filename: string; fullpath: string } | null => {
+                try {
+                    const cleaned = urlPath.replace(/^\/+/, ''); // remove leading slash
+                    if (cleaned.startsWith('data/')) {
+                        const filename = path.basename(cleaned);
+                        const full = path.join(baseMusicPath, filename);
+                        if (fs.existsSync(full)) return { filename, fullpath: full };
+                    }
+                    if (cleaned.startsWith('uploads/thumbnails/')) {
+                        const filename = path.basename(cleaned);
+                        const full = path.join(baseThumbnailPath, filename);
+                        if (fs.existsSync(full)) return { filename, fullpath: full };
+                    }
+                } catch (e) {
+                    // ignore and return null to fallback to moveOrDownload
+                }
+                return null;
+            };
+
+             // Helper to move a temp file into permanent storage; if not present, try downloading
+             const moveOrDownload = async (fileUrl: string, destDir: string) => {
                 const basename = path.basename(fileUrl);
                 const tmpFile = path.join(os.tmpdir(), basename);
                 const ext = path.extname(basename) || '.bin';
@@ -255,23 +276,34 @@ export class SongController {
             // Move audio
             let audioResult;
             try {
-                audioResult = await moveOrDownload(audioPath, baseMusicPath);
-            } catch (err: any) {
-                console.error('Audio import failed:', err && err.message ? err.message : err);
-                res.status(500).json({ error: 'Audio import failed', detail: err && err.message ? err.message : String(err) });
-                return;
-            }
-
-            // Move thumbnail (optional)
-            let thumbnailFilename: string | undefined = undefined;
-            if (thumbnailPath) {
-                try {
-                    const thumbResult = await moveOrDownload(thumbnailPath, baseThumbnailPath);
-                    thumbnailFilename = thumbResult.filename;
-                } catch (thumbErr: any) {
-                    console.warn('Thumbnail import failed, continuing without thumbnail:', thumbErr && thumbErr.message ? thumbErr.message : thumbErr);
+                // If audioPath already points to permanent storage, map it directly
+                const mapped = mapPermanentUrlToFs(audioPath);
+                if (mapped) {
+                    audioResult = mapped;
+                } else {
+                    audioResult = await moveOrDownload(audioPath, baseMusicPath);
                 }
-            }
+             } catch (err: any) {
+                 console.error('Audio import failed:', err && err.message ? err.message : err);
+                 res.status(500).json({ error: 'Audio import failed', detail: err && err.message ? err.message : String(err) });
+                 return;
+             }
+
+             // Move thumbnail (optional)
+             let thumbnailFilename: string | undefined = undefined;
+             if (thumbnailPath) {
+                 try {
+                    const mappedThumb = mapPermanentUrlToFs(thumbnailPath);
+                    if (mappedThumb) {
+                        thumbnailFilename = mappedThumb.filename;
+                    } else {
+                        const thumbResult = await moveOrDownload(thumbnailPath, baseThumbnailPath);
+                        thumbnailFilename = thumbResult.filename;
+                    }
+                 } catch (thumbErr: any) {
+                     console.warn('Thumbnail import failed, continuing without thumbnail:', thumbErr && thumbErr.message ? thumbErr.message : thumbErr);
+                 }
+             }
 
             // Determine duration (best effort) using the file path we just moved
             let duration = 0;
