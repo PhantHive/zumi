@@ -9,6 +9,18 @@ import { execFile as execFileCb } from 'child_process';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import axios from 'axios'; // ← NEW: For Invidious API
+import { fileURLToPath } from 'url';
+
+// Resolve directory name in ESM/CommonJS robustly (compiled code may run as ESM where __dirname is undefined)
+let baseDir = process.cwd();
+try {
+    // Try ESM resolution
+    // @ts-ignore
+    baseDir = path.dirname(fileURLToPath(import.meta.url));
+} catch (e) {
+    // Fallback to CommonJS __dirname if available
+    if (typeof __dirname !== 'undefined') baseDir = __dirname;
+}
 
 // Add ambient Window declarations for YouTube player globals used inside page.evaluate
 declare global {
@@ -437,8 +449,8 @@ async function ytDlpWithCookies(videoUrl: string, timestamp: number, tmpDir: str
         cookieEnv,
         '/app/config/youtube_anon.txt',
         '/app/config/cookies_anon.txt',
-        path.join(__dirname, '../../config/youtube_anon.txt'),
-        path.join(__dirname, '../../config/cookies_anon.txt')
+        path.join(baseDir, '../../config/youtube_anon.txt'),
+        path.join(baseDir, '../../config/cookies_anon.txt')
     ].filter(Boolean);
 
     let cookiePath = '';
