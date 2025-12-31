@@ -16,15 +16,6 @@ try {
     if (typeof __dirname !== 'undefined') baseDir = __dirname;
 }
 
-// (Keep YouTube globals declaration harmless though we're using SoundCloud internally)
-declare global {
-    interface Window {
-        ytInitialPlayerResponse?: any;
-        ytplayer?: any;
-        ytcfg?: any;
-    }
-}
-
 const router = Router();
 
 // ========================================================================
@@ -42,30 +33,6 @@ function runExecFile(command: string, args: string[], options: any = {}): Promis
             resolve({ stdout: String(stdout || ''), stderr: String(stderr || '') });
         });
     });
-}
-
-function findChromeExecutable(): string | null {
-    const envPath = process.env.CHROME_PATH || process.env.CHROMIUM_PATH || process.env.CHROME_BIN;
-    if (envPath && fs.existsSync(envPath)) return envPath;
-    const platform = process.platform;
-    const candidates: string[] = [];
-    if (platform === 'win32') {
-        const programFiles = process.env['PROGRAMFILES'] || 'C:\\Program Files';
-        const programFilesx86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
-        candidates.push(path.join(programFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'));
-        candidates.push(path.join(programFilesx86, 'Google', 'Chrome', 'Application', 'chrome.exe'));
-    } else if (platform === 'darwin') {
-        candidates.push('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-    } else {
-        candidates.push('/usr/bin/google-chrome');
-        candidates.push('/usr/bin/google-chrome-stable');
-        candidates.push('/usr/bin/chromium');
-        candidates.push('/usr/bin/chromium-browser');
-    }
-    for (const c of candidates) {
-        try { if (fs.existsSync(c)) return c; } catch (e) { /* ignore */ }
-    }
-    return null;
 }
 
 // getVideoInfo: works for SoundCloud via yt-dlp --dump-json
@@ -220,8 +187,11 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             description: info.description || ''
         };
 
+        // Return a URL that the client can fetch to download the generated audio file
+        const audioUrl = `/api/youtube/download-file/${path.basename(audioPath)}`;
+
         res.json({
-            audioPath,
+            audioPath: audioUrl,
             thumbnailPath: thumbnailPath || null,
             metadata,
             method: 'yt-dlp-soundcloud'
@@ -312,11 +282,48 @@ const streamHandler: RequestHandler = async (req, res) => {
     }
 };
 
-// Remove cookie-health and upload-cookies routes and related handlers
+// New endpoint: serve temporary downloaded audio files from OS temp dir
+const downloadFileHandler: RequestHandler = async (req, res) => {
+    try {
+        const { filename } = req.params as { filename?: string };
+        if (!filename || !filename.startsWith('audio-') || !filename.endsWith('.mp3')) {
+            res.status(400).json({ error: 'Invalid filename' });
+            return;
+        }
+
+        const filepath = path.join(os.tmpdir(), filename);
+        if (!fs.existsSync(filepath)) {
+            res.status(404).json({ error: 'File not found or expired' });
+            return;
+        }
+
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        const stream = fs.createReadStream(filepath);
+        stream.pipe(res);
+
+        stream.on('end', () => {
+            // best-effort cleanup after streaming
+            fs.unlink(filepath, (err) => {
+                if (err) console.error('Failed to delete temp file:', err);
+            });
+        });
+
+        stream.on('error', (err) => {
+            console.error('Error streaming file:', err);
+            try { res.end(); } catch (e) { /* ignore */ }
+        });
+    } catch (err: any) {
+        console.error('download-file handler error:', err);
+        res.status(500).json({ error: 'Failed to serve file', message: String(err) });
+    }
+};
+
+router.get('/download-file/:filename', downloadFileHandler);
 
 router.post('/search', searchYouTube);
 router.post('/download', downloadYouTube);
 router.post('/stream', streamHandler);
 
 export default router;
-
