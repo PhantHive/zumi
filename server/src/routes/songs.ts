@@ -43,6 +43,26 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
+// Debug middleware for uploads: log headers and small metadata to help debug mobile upload failures
+router.options('/', (req, res) => {
+    // Allow preflight checks for the upload endpoint
+    res.sendStatus(200);
+});
+
+const logUploadRequest = (req, res, next) => {
+    try {
+        console.log('Upload endpoint hit. Headers:', {
+            origin: req.headers.origin,
+            authorization: req.headers.authorization ? 'present' : 'missing',
+            contentType: req.headers['content-type'],
+            contentLength: req.headers['content-length'],
+        });
+    } catch (err) {
+        console.error('Failed to log upload headers:', err);
+    }
+    next();
+};
+
 // Routes
 router.use(auth);
 
@@ -59,6 +79,7 @@ router.patch('/:id/visibility', songController.updateVisibility);
 router.delete('/:id', songController.deleteSong);
 router.post(
     '/',
+    logUploadRequest,
     upload.fields([
         { name: 'audio', maxCount: 1 },
         { name: 'thumbnail', maxCount: 1 },

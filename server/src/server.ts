@@ -45,6 +45,27 @@ app.use('/data', express.static(staticPaths.data));
 // Serve mobile releases (APK files)
 app.use('/mobile', express.static('/opt/zumi-mobile/releases'));
 
+// Simple request logger to help debug upload/network issues from mobile clients
+app.use((req, res, next) => {
+    try {
+        if (req.path.startsWith('/api/songs')) {
+            console.log('Incoming /api/songs request:', req.method, req.path, {
+                authorization: req.headers.authorization ? 'present' : 'missing',
+                contentType: req.headers['content-type'],
+                contentLength: req.headers['content-length'],
+                origin: req.headers.origin || null,
+            });
+        }
+        // Also log OPTIONS preflight for visibility
+        if (req.method === 'OPTIONS') {
+            console.log('OPTIONS preflight:', req.path, 'headers:', req.headers);
+        }
+    } catch (err) {
+        console.error('Request logger error:', err);
+    }
+    next();
+});
+
 // Routes
 app.use('/api/auth', authRoutes); // Auth routes should be public
 app.use('/api/songs', auth, songRoutes); // Protect song routes with auth middleware
@@ -80,6 +101,14 @@ app.get('/api/mobile/version', (req, res) => {
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+// Global error handler to log unexpected errors
+app.use((err: any, req: any, res: any, next: any) => {
+    console.error('Unhandled server error:', err && err.stack ? err.stack : err);
+    if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+    }
 });
 
 export default app;
