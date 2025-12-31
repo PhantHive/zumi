@@ -431,7 +431,7 @@ async function ytDlpWithCookies(videoUrl: string, timestamp: number, tmpDir: str
     console.log('🍪 Attempting yt-dlp with anonymous cookies...');
 
     // Cookie file path - works in both dev and production
-    const cookiePath = process.env.YOUTUBE_COOKIES_PATH || path.join(__dirname, '../../config/youtube_anon.txt');
+    const cookiePath = process.env.YOUTUBE_COOKIES_PATH || '/app/config/youtube_anon.txt';
 
     // Check if cookie file exists
     if (!fs.existsSync(cookiePath)) {
