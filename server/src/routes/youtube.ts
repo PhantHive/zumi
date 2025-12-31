@@ -35,6 +35,69 @@ function runExecFile(command: string, args: string[], options: any = {}): Promis
     });
 }
 
+// ========================================================================
+// SMART MATCHING - Compare YouTube title with SoundCloud result
+// ========================================================================
+
+function calculateMatchQuality(youtubeTitle: string, soundcloudTitle: string, artist?: string): 'good' | 'uncertain' {
+    if (!youtubeTitle || !soundcloudTitle) return 'uncertain';
+
+    // Normalize: lowercase, remove special chars, extra spaces
+    const normalize = (str: string) => str
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, ' ')  // Remove special chars except dash
+        .replace(/\s+/g, ' ')        // Collapse spaces
+        .trim();
+
+    const ytNorm = normalize(youtubeTitle);
+    const scNorm = normalize(soundcloudTitle);
+
+    // Extract main song title (before dash, parentheses, brackets)
+    const extractMainTitle = (str: string) => {
+        const parts = str.split(/[-–—([\]]/);
+        return normalize(parts[0]);
+    };
+
+    const ytMain = extractMainTitle(ytNorm);
+    const scMain = extractMainTitle(scNorm);
+
+    // Check 1: If artist is provided, both should contain it
+    if (artist) {
+        const artistNorm = normalize(artist);
+        const ytHasArtist = ytNorm.includes(artistNorm);
+        const scHasArtist = scNorm.includes(artistNorm);
+
+        // If YouTube has artist but SoundCloud doesn't, likely wrong song
+        if (ytHasArtist && !scHasArtist) {
+            return 'uncertain';
+        }
+    }
+
+    // Check 2: Main title overlap (at least 60% of words match)
+    const ytWords = new Set(ytMain.split(' ').filter(w => w.length > 2));
+    const scWords = new Set(scMain.split(' ').filter(w => w.length > 2));
+
+    const commonWords = [...ytWords].filter(w => scWords.has(w));
+    const minWords = Math.min(ytWords.size, scWords.size);
+
+    if (minWords > 0) {
+        const overlap = commonWords.length / minWords;
+        if (overlap >= 0.6) return 'good';
+    }
+
+    // Check 3: Direct substring match
+    if (ytMain.includes(scMain) || scMain.includes(ytMain)) {
+        return 'good';
+    }
+
+    // Check 4: Exact match of main titles
+    if (ytMain === scMain) {
+        return 'good';
+    }
+
+    return 'uncertain';
+}
+
 // getVideoInfo: works for SoundCloud via yt-dlp --dump-json
 async function getVideoInfo(videoUrl: string): Promise<any> {
     try {
@@ -63,7 +126,8 @@ const searchYouTube: RequestHandler = async (req, res) => {
             return;
         }
 
-        const searchArg = `scsearch10:${query}`;
+        // Search YOUTUBE (not SoundCloud) for pretty thumbnails
+        const searchArg = `ytsearch10:${query}`;
         let stdout: string;
         try {
             const out = await runExecFile('yt-dlp', ['--dump-json', searchArg], { maxBuffer: 100 * 1024 * 1024 });
@@ -83,7 +147,7 @@ const searchYouTube: RequestHandler = async (req, res) => {
                 items.push({
                     videoId: info.id || info.webpage_url || info.url || null,
                     title: info.title || '',
-                    channelName: info.uploader || info.uploader_id || info.uploader_url || '',
+                    channelName: info.uploader || info.channel || info.uploader_id || '',
                     thumbnail: info.thumbnail || (info.thumbnails && info.thumbnails.length ? info.thumbnails[info.thumbnails.length - 1].url : null),
                     duration: info.duration ? `${Math.floor(info.duration / 60)}:${String(info.duration % 60).padStart(2, '0')}` : 'N/A',
                     description: info.description || ''
@@ -255,18 +319,25 @@ const downloadYouTube: RequestHandler = async (req, res) => {
             return;
         }
 
-        // 6. Calculate match quality
-        const youtubeTitle = (title || '').toLowerCase();
-        const soundcloudTitle = (scData.title || '').toLowerCase();
-        const scMainTitle = soundcloudTitle.split('-')[0].trim();
-
-        const matchQuality = youtubeTitle.includes(scMainTitle) || scMainTitle.includes(youtubeTitle)
-            ? 'good'
-            : 'uncertain';
+        // 6. Calculate match quality using smart algorithm
+        const matchQuality = calculateMatchQuality(
+            title || '',
+            scData.title || '',
+            artist
+        );
 
         console.log(`🎯 Match quality: ${matchQuality}`);
         console.log(`   YouTube: "${title}"`);
         console.log(`   SoundCloud: "${scData.title}"`);
+        if (artist) {
+            console.log(`   Artist: "${artist}"`);
+        }
+
+        // Log warning if match is uncertain
+        if (matchQuality === 'uncertain') {
+            console.warn('⚠️ UNCERTAIN MATCH - titles differ significantly');
+            console.warn('   This might be a different version/remix/cover');
+        }
 
         // 7. Return file paths and metadata
         const metadata = {
