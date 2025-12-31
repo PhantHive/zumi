@@ -452,7 +452,7 @@ async function saveCookiesContent(cookieText: string): Promise<string> {
             // Ensure getCookiePath will pick this file by setting env var
             process.env.YOUTUBE_COOKIES_PATH = dest;
             return dest;
-        } catch (e) {
+        } catch (e: any) {
             // try next
             console.warn('Could not write cookies to', dest, e?.message || e);
         }
