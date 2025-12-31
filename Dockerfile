@@ -43,8 +43,8 @@ RUN npm install
 COPY dist/ ./dist/
 COPY shared/ ./shared/
 
-# Copy config directory with YouTube cookies
-COPY config/ ./config/
+# Copy config directory (place config under dist so runtime path resolution works)
+COPY server/src/config/ ./dist/config/
 
 # Create necessary directories with correct permissions
 RUN mkdir -p /app/uploads/thumbnails /app/data /app/database && \
