@@ -8,6 +8,8 @@ services:
             - ./uploads:/app/uploads
             - ./data:/app/data
             - ./database:/app/database
+            - ./server/src/config:/app/config:ro
         environment:
             - NODE_ENV=production
+            - YOUTUBE_COOKIES_PATH=/app/config/youtube_anon.txt
         restart: unless-stopped

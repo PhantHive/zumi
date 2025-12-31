@@ -1,6 +1,10 @@
 import { Router, RequestHandler } from 'express';
 import yts from 'youtube-search-api';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { execFile as execFileCb, spawn } from 'child_process';
 
 // Resolve directory name in ESM/CommonJS robustly (compiled code may run as ESM where __dirname is undefined)
 let baseDir = process.cwd();
