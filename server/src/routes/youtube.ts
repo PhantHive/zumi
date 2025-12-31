@@ -190,8 +190,7 @@ const downloadYouTube: RequestHandler = async (req, res) => {
         // Return a URL that the client can fetch to download the generated audio file
         const audioUrl = `/api/youtube/download-file/${path.basename(audioPath)}`;
 
-            const thumbnails = infoJson?.thumbnails;
-            const thumbnailUrl = infoJson?.thumbnail || (Array.isArray(thumbnails) ? thumbnails[thumbnails.length - 1]?.url : scData?.thumbnail || null);
+        res.json({
             audioPath: audioUrl,
             thumbnailPath: thumbnailPath || null,
             metadata,
