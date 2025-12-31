@@ -91,7 +91,6 @@ jobs:
               -v /opt/music-server/data:/app/data \
               -v /opt/music-server/database:/app/database \
               -v /opt/music-server/config:/app/config \
-              -e YOUTUBE_COOKIES_PATH=/app/config/youtube_anon.txt \
               zaphial/music-server:${{ env.TAG_NAME }}
             
             # Check if container started successfully

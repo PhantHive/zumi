@@ -8,7 +8,6 @@ import connectDB from './utils/mongoose.js';
 import dotenv from 'dotenv';
 import auth from './middlewares/auth.js';
 import authRoutes from './routes/authRoutes.js';
-import youtubeRoutes, { downloadFileHandler } from './routes/youtube.js';
 
 // Load environment variables
 dotenv.config();
@@ -70,12 +69,6 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes); // Auth routes should be public
 app.use('/api/songs', auth, songRoutes); // Protect song routes with auth middleware
 
-// Mount the file download endpoint as public (no auth) so clients can fetch generated files
-app.get('/api/youtube/download-file/:filename', downloadFileHandler);
-
-// Protect remaining YouTube routes (search/download) with auth middleware
-app.use('/api/youtube', auth, youtubeRoutes); // Protect youtube routes with auth middleware
-
 // Mobile version check endpoint
 app.get('/api/mobile/version', (req, res) => {
     try {
@@ -104,7 +97,7 @@ const serverInstance = app.listen(PORT, () => {
     console.log('Server timeout configured to support long-running tasks');
 });
 
-// Set a generous timeout (ms) for long-running child processes like yt-dlp
+// Set a generous timeout (ms) for long-running child processes
 try {
     serverInstance.setTimeout(5 * 60 * 1000); // 5 minutes
 } catch (err) {

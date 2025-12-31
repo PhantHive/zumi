@@ -420,6 +420,20 @@ export class DbClient {
         });
     }
 
+    // Delete a song row by id regardless of uploader (simple administrative delete)
+    async deleteSongById(id: number): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            this.db.run(
+                'DELETE FROM songs WHERE id = ?',
+                [id],
+                function (this: any, err: Error | null) {
+                    if (err) return reject(err);
+                    resolve(this.changes > 0);
+                },
+            );
+        });
+    }
+
     async updateSong(
         id: number,
         updates: Partial<Omit<Song, 'id'>> & { filepath?: string; duration?: number },

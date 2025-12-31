@@ -6,7 +6,6 @@ import { Song, Genre } from '../../../shared/types/common.js';
 import * as fs from 'node:fs';
 import { AuthenticatedRequest } from './authController.js';
 import User from '../models/User.js';
-import { spawnSync } from 'child_process';
 
 type MulterRequest = Request & {
     files?: {
@@ -186,185 +185,6 @@ export class SongController {
         }
     };
 
-    // Import a song by referencing server-side or remote URLs (used by mobile client)
-    importSong: RequestHandler = async (req, res) => {
-        try {
-            const authenticatedReq = req as AuthenticatedRequest;
-            const userEmail = authenticatedReq.user.email;
-
-            const isDev = process.env.NODE_ENV === 'development';
-            const baseMusicPath = isDev ? path.resolve('./public/data') : '/app/data';
-            const baseThumbnailPath = isDev
-                ? path.resolve('./public/uploads/thumbnails')
-                : '/app/uploads/thumbnails';
-
-            await fs.promises.mkdir(baseMusicPath, { recursive: true });
-            await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
-
-            const { audioPath, thumbnailPath } = req.body as { audioPath?: string; thumbnailPath?: string };
-            if (!audioPath) {
-                res.status(400).json({ error: 'audioPath required' });
-                return;
-            }
-
-            // If the path is already a server file (relative or absolute), map it directly
-            const isLocal = audioPath.startsWith('/') || audioPath.startsWith('.') || /^[A-Za-z]:\\/.test(audioPath);
-            if (isLocal) {
-                // try to resolve to existing file
-                const filename = path.basename(audioPath);
-                const candidate = path.join(baseMusicPath, filename);
-                if (fs.existsSync(candidate)) {
-                    const duration = await getAudioDurationInSeconds(candidate).catch(() => 0);
-                    const song: Partial<Song> = {
-                        title: req.body.title || path.parse(filename).name,
-                        artist: req.body.artist || 'Unknown Artist',
-                        duration: Math.floor(duration) || 0,
-                        albumId: req.body.album || 'Unknown Album',
-                        filepath: candidate,
-                        thumbnailUrl: 'placeholder.jpg',
-                        uploadedBy: userEmail,
-                        visibility: req.body.visibility || 'public',
-                        tags: req.body.tags ? (req.body.tags as string).split(',').map(t => t.trim()) : undefined,
-                    };
-                    const newSong = await db.createSong({ ...song, genre: (req.body.genre as Genre) || undefined });
-                    res.status(201).json({ data: newSong });
-                    return;
-                }
-            }
-
-            // Prepare names
-            const baseName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            let downloadedFileName: string | undefined = undefined;
-            let downloadedThumbName: string | undefined = undefined;
-
-            // Try yt-dlp if available
-            try {
-                const outTemplate = path.join(baseMusicPath, `${baseName}.%(ext)s`);
-                const args = ['-x', '--audio-format', 'mp3', '--no-playlist', '-o', outTemplate, audioPath];
-                const proc = spawnSync('yt-dlp', args, { encoding: 'utf8' });
-                if (!proc.error && proc.status === 0) {
-                    const files = await fs.promises.readdir(baseMusicPath);
-                    downloadedFileName = files.find(f => f.startsWith(baseName + '.'));
-
-                    // Attempt to get metadata JSON (thumbnail URL) and fetch that thumbnail directly.
-                    try {
-                        const jproc = spawnSync('yt-dlp', ['-j', '--no-playlist', audioPath], { encoding: 'utf8' });
-                        if (!jproc.error && jproc.stdout) {
-                            try {
-                                const meta = JSON.parse(jproc.stdout.split('\n').find(Boolean) || jproc.stdout);
-                                const thumbUrl = meta?.thumbnail || meta?.thumbnails?.[0]?.url;
-                                if (thumbUrl) {
-                                    try {
-                                        const tresp = await (globalThis as any).fetch(thumbUrl);
-                                        if (tresp && tresp.ok) {
-                                            const tbuff = Buffer.from(await tresp.arrayBuffer());
-                                            const textExt = path.extname(new URL(thumbUrl).pathname) || '.jpg';
-                                            downloadedThumbName = `${baseName}${textExt}`;
-                                            await fs.promises.writeFile(path.join(baseThumbnailPath, downloadedThumbName), tbuff);
-                                        }
-                                    } catch (tdlErr) {
-                                        console.warn('Failed to download thumbnail from metadata URL:', tdlErr);
-                                    }
-                                }
-                            } catch (parseErr) {
-                                console.warn('Failed to parse yt-dlp JSON metadata:', parseErr);
-                            }
-                        }
-                    } catch (metaErr) {
-                        console.warn('yt-dlp metadata fetch failed:', metaErr);
-                    }
-                } else {
-                    console.warn('yt-dlp not used or failed:', proc.error || proc.status);
-                }
-
-                // If metadata-based thumbnail download didn't run or failed, fall back to --write-thumbnail
-                if (!downloadedThumbName) {
-                    try {
-                        const thumbOut = path.join(baseThumbnailPath, `${baseName}.%(ext)s`);
-                        const targs = ['--write-thumbnail', '--skip-download', '-o', thumbOut, audioPath];
-                        const tproc = spawnSync('yt-dlp', targs, { encoding: 'utf8' });
-                        if (!tproc.error && tproc.status === 0) {
-                            const tfiles = await fs.promises.readdir(baseThumbnailPath);
-                            downloadedThumbName = tfiles.find(f => f.startsWith(baseName + '.'));
-                        }
-                    } catch (tErr) {
-                        console.warn('yt-dlp thumbnail attempt failed:', tErr);
-                    }
-                }
-            } catch (err) {
-                console.warn('yt-dlp run failed or not installed:', err);
-            }
-
-            // If yt-dlp didn't produce an audio file, try HTTP fetch fallback for direct links
-            if (!downloadedFileName) {
-                try {
-                    const resp = await (globalThis as any).fetch(audioPath);
-                    if (!resp || !resp.ok) throw new Error(`fetch failed ${resp ? resp.status : 'no response'}`);
-                    const buffer = Buffer.from(await resp.arrayBuffer());
-                    const ext = path.extname(new URL(audioPath).pathname) || '.mp3';
-                    downloadedFileName = `${baseName}${ext}`;
-                    await fs.promises.writeFile(path.join(baseMusicPath, downloadedFileName), buffer);
-                } catch (fetchErr) {
-                    console.error('Failed to obtain remote audio:', fetchErr && (fetchErr as any).message ? (fetchErr as any).message : fetchErr);
-                    res.status(500).json({ error: 'Failed to download audio. Ensure the URL is accessible or install yt-dlp for remote service support.' });
-                    return;
-                }
-            }
-
-            const audioFullPath = path.join(baseMusicPath, downloadedFileName!);
-
-            // If thumbnailPath provided by client, try to fetch it (prefer client's thumbnail)
-            if (!downloadedThumbName && thumbnailPath) {
-                try {
-                    const resp = await (globalThis as any).fetch(thumbnailPath);
-                    if (resp && resp.ok) {
-                        const buffer = Buffer.from(await resp.arrayBuffer());
-                        const ext = path.extname(new URL(thumbnailPath).pathname) || '.jpg';
-                        downloadedThumbName = `${baseName}${ext}`;
-                        await fs.promises.writeFile(path.join(baseThumbnailPath, downloadedThumbName), buffer);
-                    }
-                } catch (e) {
-                    console.warn('Failed to fetch provided thumbnail:', e);
-                }
-            }
-
-            // Compute duration
-            let duration = 0;
-            try {
-                duration = Math.floor(await getAudioDurationInSeconds(audioFullPath));
-            } catch (e) {
-                console.warn('Failed to compute duration:', e);
-            }
-
-            const tags = req.body.tags ? (req.body.tags as string).split(',').map((t: string) => t.trim()) : undefined;
-
-            const song: Partial<Song> = {
-                title: req.body.title || path.parse(downloadedFileName!).name,
-                artist: req.body.artist || 'Unknown Artist',
-                duration: duration || 0,
-                albumId: req.body.album || 'Unknown Album',
-                filepath: audioFullPath,
-                thumbnailUrl: downloadedThumbName || 'placeholder.jpg',
-                uploadedBy: userEmail,
-                visibility: req.body.visibility || 'public',
-                year: req.body.year ? parseInt(req.body.year) : undefined,
-                bpm: req.body.bpm ? parseInt(req.body.bpm) : undefined,
-                mood: req.body.mood,
-                language: req.body.language,
-                lyrics: req.body.lyrics,
-                tags,
-            };
-
-            const newSong = await db.createSong({ ...song, genre: (req.body.genre as Genre) || undefined });
-            res.status(201).json({ data: newSong });
-            return;
-        } catch (error: unknown) {
-            console.error('Error importing song:', error);
-            res.status(500).json({ error: 'Failed to import song', detail: error && (error as any).message ? (error as any).message : String(error) });
-            return;
-        }
-    };
-
     streamSong: RequestHandler = async (req, res) => {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
@@ -525,6 +345,28 @@ export class SongController {
                 console.error('Error deleting song:', error);
             }
             res.status(500).json({ error: 'Failed to delete song' });
+        }
+    };
+
+    // Simple administrative delete: remove song row by id regardless of uploader
+    deleteSongRow: RequestHandler = async (req, res) => {
+        try {
+            const songId = parseInt(req.params.id);
+            if (Number.isNaN(songId)) {
+                res.status(400).json({ error: 'Invalid song id' });
+                return;
+            }
+
+            const success = await db.deleteSongById(songId);
+            if (!success) {
+                res.status(404).json({ error: 'Song not found' });
+                return;
+            }
+
+            res.json({ message: 'Song row deleted successfully' });
+        } catch (error: unknown) {
+            if (error instanceof Error) console.error('Error in deleteSongRow:', error);
+            res.status(500).json({ error: 'Failed to delete song row' });
         }
     };
 

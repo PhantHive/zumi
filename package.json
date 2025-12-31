@@ -146,7 +146,6 @@
     "webpack-dev-server": "^5.1.0"
   },
   "dependencies": {
-    "@distube/ytdl-core": "^4.13.5",
     "@electron/remote": "^2.1.2",
     "cors": "^2.8.5",
     "discord-rpc": "^4.0.1",
@@ -175,8 +174,6 @@
     "sass": "^1.83.0",
     "sass-loader": "^16.0.4",
     "sharp": "^0.34.5",
-    "sqlite3": "^5.1.7",
-    "youtube-search-api": "^1.2.1",
-    "ytdl-core": "^4.11.5"
+    "sqlite3": "^5.1.7"
   }
 }

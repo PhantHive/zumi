@@ -72,14 +72,16 @@ router.get('/albums', songController.getAlbums);
 router.get('/my-uploads', songController.getMyUploads);
 router.get('/liked', songController.getLikedSongs);
 
-// New import route: accept references to server-side audio/thumbnail (no multipart) and create DB entry
-router.post('/import', songController.importSong);
-
 router.get('/:id', songController.getSong);
 router.get('/:id/stream', songController.streamSong);
 router.post('/:id/like', songController.toggleLike);
 router.patch('/:id/visibility', songController.updateVisibility);
 router.delete('/:id', songController.deleteSong);
+
+// Simple administrative delete route: DELETE /api/songs/:id/row
+// Removes the song row by id regardless of uploader. Keep protected by auth middleware.
+router.delete('/:id/row', songController.deleteSongRow);
+
 router.post(
     '/',
     logUploadRequest,
