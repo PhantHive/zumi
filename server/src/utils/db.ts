@@ -16,7 +16,8 @@ export const GENRES = [
     'Cinematic',
 ] as const;
 
-export type Genre = (typeof GENRES)[number];
+// NOTE: Genre used to be a fixed union from GENRES. We now store genre as a freeform string in the DB.
+// Keep GENRES as a client-side recommendation list but do not export a fixed Genre type from the DB util.
 
 // Database row type (what we get from SQLite)
 interface SongRow {
@@ -28,7 +29,7 @@ interface SongRow {
     albumId: string;
     thumbnailUrl: string | null;
     cover_art: string | null;
-    genre: Genre;
+    genre: string; // changed from Genre to flexible string
     uploadedBy: string | null;
     visibility: 'public' | 'private';
     year: number | null;
@@ -89,7 +90,7 @@ export class DbClient {
           albumId TEXT DEFAULT 'kpop',
           thumbnailUrl TEXT,
           cover_art TEXT,
-          genre TEXT CHECK(genre IN ('${GENRES.join("','")}')) NOT NULL DEFAULT 'K-Pop',
+          genre TEXT DEFAULT 'K-Pop',
           uploadedBy TEXT,
           visibility TEXT CHECK(visibility IN ('public', 'private')) NOT NULL DEFAULT 'public',
           year INTEGER,
@@ -241,7 +242,7 @@ export class DbClient {
         });
     }
 
-    async createSong(song: Partial<Song> & { genre?: Genre }): Promise<Song> {
+    async createSong(song: Partial<Song> & { genre?: string }): Promise<Song> {
         const sql = `
       INSERT INTO songs (
         title, artist, duration, filepath, albumId, thumbnailUrl, genre,
@@ -285,6 +286,20 @@ export class DbClient {
                             else resolve(newSong);
                         })
                         .catch(reject);
+                },
+            );
+        });
+    }
+
+    // Return top genres ordered by count
+    async getTopGenres(limit = 10): Promise<{ genre: string; count: number }[]> {
+        return new Promise((resolve, reject) => {
+            this.db.all(
+                `SELECT genre, COUNT(*) as count FROM songs WHERE genre IS NOT NULL GROUP BY genre ORDER BY count DESC LIMIT ?`,
+                [limit],
+                (err, rows: Array<{ genre: string; count: number }>) => {
+                    if (err) return reject(err);
+                    resolve(rows.map((r) => ({ genre: r.genre, count: r.count })));
                 },
             );
         });

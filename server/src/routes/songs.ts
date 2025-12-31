@@ -143,6 +143,9 @@ router.get('/thumbnails/:filename/colors', async (req, res) => {
     }
 });
 
+// New: return top genres for recommendations
+router.get('/genres', songController.getTopGenres);
+
 export const staticPaths = {
     uploads: isDev
         ? path.join(PROJECT_ROOT, 'public', 'uploads')

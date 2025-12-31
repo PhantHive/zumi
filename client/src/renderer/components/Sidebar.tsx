@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { apiClient } from '../utils/apiClient';
-import { GENRES, Genre } from '../../../../shared/types/common';
+import { GENRES } from '../../../../shared/types/common';
 import '../styles/sidebar.css';
 import BurgerButton from './BurgerButton';
 import jsmediatags from 'jsmediatags';
@@ -25,7 +25,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     const [albumName, setAlbumName] = useState('');
     const [artistName, setArtistName] = useState('');
     const [songTitle, setSongTitle] = useState('');
-    const [genre, setGenre] = useState<Genre>('K-Pop');
+    const [genre, setGenre] = useState<string>('K-Pop');
+    const [topGenres, setTopGenres] = useState<string[]>(Array.from(GENRES));
     const [visibility, setVisibility] = useState<'public' | 'private'>(
         'public',
     );
@@ -67,6 +68,23 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
         fetchSuggestions();
     }, []);
 
+    // Fetch top genres for recommendations (non-blocking)
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            try {
+                const res = await apiClient.get<{ data: { genre: string; count: number }[] }>('/api/songs/genres');
+                if (!mounted) return;
+                const list = (res.data || []).map((g) => g.genre).filter(Boolean);
+                if (list.length) setTopGenres(list);
+            } catch (err) {
+                // ignore failures, keep fallback GENRES
+                console.debug('Failed to load top genres:', err);
+            }
+        })();
+        return () => { mounted = false; };
+    }, []);
+
     const handleAudioFileChange = async (
         event: React.ChangeEvent<HTMLInputElement>,
     ) => {
@@ -94,21 +112,17 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                 if (tags.genre && !genre) {
                     // Try to match the genre from the file with available GENRES
                     const fileGenre = tags.genre;
-                    const matchedGenre = GENRES.find(
-                        (g) => g.toLowerCase() === fileGenre.toLowerCase(),
+                    const matchedGenre = Array.from(GENRES).find(
+                        (g) => g.toLowerCase() === String(fileGenre).toLowerCase(),
                     );
-                    if (matchedGenre) {
-                        setGenre(matchedGenre as Genre);
-                    }
+                    setGenre(matchedGenre || String(fileGenre));
                 }
                 if (tags.lyrics && !lyrics) {
                     const lyricsText =
                         typeof tags.lyrics === 'string'
                             ? tags.lyrics
                             : tags.lyrics.lyrics;
-                    if (typeof lyricsText === 'string') {
-                        setLyrics(lyricsText);
-                    }
+                    setLyrics(String(lyricsText));
                 }
 
                 // Extract embedded thumbnail/album art
@@ -393,20 +407,21 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                             )}
                     </div>
 
-                    {/* Genre Select */}
-                    <select
+                    {/* Freeform genre input with suggestions (datalist) */}
+                    <input
+                        list="genre-suggestions"
                         value={genre}
-                        onChange={(e) => setGenre(e.target.value as Genre)}
+                        onChange={(e) => setGenre(e.target.value)}
+                        placeholder="Genre"
                         style={{ marginBottom: '10px' }}
                         disabled={isUploading}
-                        className="genre-select"
-                    >
-                        {GENRES.map((g) => (
-                            <option key={g} value={g}>
-                                {g}
-                            </option>
+                        className="genre-input"
+                    />
+                    <datalist id="genre-suggestions">
+                        {(topGenres.length ? topGenres : Array.from(GENRES)).map((g) => (
+                            <option key={g} value={g} />
                         ))}
-                    </select>
+                    </datalist>
 
                     {/* Visibility Select */}
                     <div className="visibility-container">

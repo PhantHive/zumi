@@ -2,7 +2,7 @@ import { Request, RequestHandler } from 'express';
 import { getAudioDurationInSeconds } from 'get-audio-duration';
 import path from 'path';
 import { db } from '../utils/db.js';
-import { Song, Genre } from '../../../shared/types/common.js';
+import { Song } from '../../../shared/types/common.js';
 import * as fs from 'node:fs';
 import { AuthenticatedRequest } from './authController.js';
 import User from '../models/User.js';
@@ -176,7 +176,7 @@ export class SongController {
 
             const newSong = await db.createSong({
                 ...song,
-                genre: (req.body.genre as Genre) || undefined,
+                genre: req.body.genre ? String(req.body.genre) : undefined,
             });
             res.status(201).json({ data: newSong });
         } catch (error) {
@@ -454,7 +454,18 @@ export class SongController {
             res.status(500).json({ error: 'Failed to fetch liked songs' });
         }
     };
+
+    // Return top genres for recommendation
+    getTopGenres: RequestHandler = async (req, res) => {
+        try {
+            const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 10;
+            const data = await db.getTopGenres(isNaN(limit) ? 10 : limit);
+            res.json({ data });
+        } catch (error: unknown) {
+            if (error instanceof Error) console.error('Error fetching top genres:', error);
+            res.status(500).json({ error: 'Failed to fetch genres' });
+        }
+    };
 }
 
 export const songController = new SongController();
-
