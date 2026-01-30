@@ -25,7 +25,7 @@ export async function downloadFromYoutube(urls: string[], uploaderEmail?: string
     fs.mkdirSync(baseMusicPath, { recursive: true });
     fs.mkdirSync(baseThumbnailPath, { recursive: true });
 
-    const scriptPath = path.resolve(process.cwd(), 'server', 'tools', 'download_youtube.py');
+    const scriptPath = path.resolve(process.cwd(), 'server', 'tools', 'youtube_search.py');
 
     return new Promise<any[]>((resolve, reject) => {
         const py = spawn(process.env.PYTHON || 'python3', [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });

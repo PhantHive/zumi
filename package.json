@@ -13,7 +13,7 @@
     "build:electron": "tsc -p client/tsconfig.json",
     "build:dev": "cross-env NODE_ENV=development npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
     "build:prod": "cross-env NODE_ENV=production npm run build:electron && npm run build:client && npm run copy-public && npm run copy-assets",
-    "dev": "concurrently -n \"RENDERER,SERVER,ELECTRON\" -c \"cyan,yellow,green\" \"npm run dev:renderer\" \"npm run dev:server\" \"npm run dev:electron\"",
+    "dev": "cross-env NODE_ENV=development concurrently -n \"RENDERER,SERVER,ELECTRON\" -c \"cyan,yellow,green\" \"npm run dev:renderer\" \"npm run dev:server\" \"npm run dev:electron\"",
     "dev:renderer": "cross-env NODE_ENV=development webpack serve --config webpack.config.cjs",
     "dev:electron": "cross-env NODE_ENV=development electron .",
     "dev:server": "cross-env NODE_ENV=development tsx watch server/src/server.ts",
