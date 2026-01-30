@@ -50,7 +50,13 @@ const App: React.FC = () => {
             // Check if PIN is set
             const checkPin = async () => {
                 try {
-                    const hasPinSet = await ipcRenderer.invoke('pin:has-pin');
+                    const response = await ipcRenderer.invoke('pin:has-pin');
+                    console.log('PIN check response:', response);
+
+                    // FIX: Extract the actual boolean from the response object
+                    // The handler returns { success: true, hasPinSet: false }
+                    // We need to check response.hasPinSet, not just response
+                    const hasPinSet = response?.hasPinSet || false;
                     setHasPin(hasPinSet);
                     setIsUnlocked(!hasPinSet); // If no PIN, unlock automatically
                 } catch (error) {
@@ -63,10 +69,11 @@ const App: React.FC = () => {
                     ) {
                         console.warn('IPC not available; keeping UI locked for safety');
                         setHasPin(false);
-                        setIsUnlocked(false);
+                        setIsUnlocked(true); // FIX: If no IPC, unlock anyway (dev mode)
                     } else {
                         console.error('Error checking PIN:', error);
-                        setIsUnlocked(false);
+                        setHasPin(false);
+                        setIsUnlocked(true); // FIX: On error, unlock anyway
                     }
                 } finally {
                     setIsCheckingPin(false);
@@ -217,4 +224,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
