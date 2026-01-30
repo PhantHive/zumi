@@ -22,14 +22,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     const [isOpen, setIsOpen] = useState(false);
     const audioInputRef = useRef<HTMLInputElement>(null);
     const thumbnailInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
     const [albumName, setAlbumName] = useState('');
     const [artistName, setArtistName] = useState('');
     const [songTitle, setSongTitle] = useState('');
     const [genre, setGenre] = useState<string>('K-Pop');
     const [topGenres, setTopGenres] = useState<string[]>(Array.from(GENRES));
-    const [visibility, setVisibility] = useState<'public' | 'private'>(
-        'public',
-    );
+    const [visibility, setVisibility] = useState<'public' | 'private'>('public');
     const [year, setYear] = useState('');
     const [bpm, setBpm] = useState('');
     const [mood, setMood] = useState('');
@@ -45,9 +44,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     const [showAlbumSuggestions, setShowAlbumSuggestions] = useState(false);
     const [showArtistSuggestions, setShowArtistSuggestions] = useState(false);
     const [userName, setUserName] = useState('');
-    const [extractedThumbnail, setExtractedThumbnail] = useState<File | null>(
-        null,
-    );
+    const [extractedThumbnail, setExtractedThumbnail] = useState<File | null>(null);
 
     useEffect(() => {
         const fetchSuggestions = async () => {
@@ -68,7 +65,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
         fetchSuggestions();
     }, []);
 
-    // Fetch top genres for recommendations (non-blocking)
     useEffect(() => {
         let mounted = true;
         (async () => {
@@ -78,25 +74,20 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                 const list = (res.data || []).map((g) => g.genre).filter(Boolean);
                 if (list.length) setTopGenres(list);
             } catch (err) {
-                // ignore failures, keep fallback GENRES
                 console.debug('Failed to load top genres:', err);
             }
         })();
         return () => { mounted = false; };
     }, []);
 
-    const handleAudioFileChange = async (
-        event: React.ChangeEvent<HTMLInputElement>,
-    ) => {
+    const handleAudioFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Read metadata from the audio file
         jsmediatags.read(file, {
             onSuccess: (tag) => {
                 const { tags } = tag;
 
-                // Auto-fill form fields with metadata
                 if (tags.title && !songTitle) {
                     setSongTitle(tags.title);
                 }
@@ -110,7 +101,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                     setYear(tags.year.toString());
                 }
                 if (tags.genre && !genre) {
-                    // Try to match the genre from the file with available GENRES
                     const fileGenre = tags.genre;
                     const matchedGenre = Array.from(GENRES).find(
                         (g) => g.toLowerCase() === String(fileGenre).toLowerCase(),
@@ -125,40 +115,25 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                     setLyrics(String(lyricsText));
                 }
 
-                // Extract embedded thumbnail/album art
                 if (tags.picture) {
                     const picture = tags.picture;
                     const { data, format } = picture;
-
-                    // Convert the image data to a Blob
                     const byteArray = new Uint8Array(data);
                     const blob = new Blob([byteArray], { type: format });
-
-                    // Create a File object from the Blob
-                    const imageFile = new File([blob], 'cover.jpg', {
-                        type: format,
-                    });
-
-                    // Store the extracted thumbnail
+                    const imageFile = new File([blob], 'cover.jpg', { type: format });
                     setExtractedThumbnail(imageFile);
 
-                    // If no thumbnail is selected, use the extracted one
                     if (!thumbnailInputRef.current?.files?.[0]) {
-                        // Create a new DataTransfer to set the file input
                         const dataTransfer = new DataTransfer();
                         dataTransfer.items.add(imageFile);
                         if (thumbnailInputRef.current) {
-                            thumbnailInputRef.current.files =
-                                dataTransfer.files;
+                            thumbnailInputRef.current.files = dataTransfer.files;
                         }
                     }
-
-                    console.log('Extracted thumbnail from audio file');
                 }
             },
             onError: (error) => {
                 console.error('Error reading audio metadata:', error);
-                // If metadata reading fails, fallback to filename
                 if (!songTitle) {
                     setSongTitle(file.name.replace(/\.[^/.]+$/, ''));
                 }
@@ -170,8 +145,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
         event.preventDefault();
 
         const audioFile = audioInputRef.current?.files?.[0];
-        const thumbnailFile =
-            thumbnailInputRef.current?.files?.[0] || extractedThumbnail;
+        const thumbnailFile = thumbnailInputRef.current?.files?.[0] || extractedThumbnail;
+        const videoFile = videoInputRef.current?.files?.[0];
 
         if (!audioFile) return;
 
@@ -183,7 +158,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
         formData.append('genre', genre);
         formData.append('visibility', visibility);
 
-        // Add optional metadata fields
         if (year) formData.append('year', year);
         if (bpm) formData.append('bpm', bpm);
         if (mood) formData.append('mood', mood);
@@ -195,6 +169,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
             formData.append('thumbnail', thumbnailFile);
         }
 
+        if (videoFile) {
+            formData.append('video', videoFile);
+        }
+
         try {
             setIsUploading(true);
             await apiClient.post('/api/songs', formData);
@@ -203,6 +181,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
             // Reset all inputs
             if (audioInputRef.current) audioInputRef.current.value = '';
             if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+            if (videoInputRef.current) videoInputRef.current.value = '';
             setSongTitle('');
             setAlbumName('');
             setArtistName('');
@@ -214,6 +193,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
             setLyrics('');
             setVisibility('public');
             setExtractedThumbnail(null);
+            setShowAdvanced(false);
         } catch (error) {
             console.error('Upload error:', error);
         } finally {
@@ -259,7 +239,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     }, []);
 
     useEffect(() => {
-        // Add or remove the sidebar-open class from main-content
         const mainContent = document.querySelector('.main-content');
         if (mainContent) {
             if (isOpen) {
@@ -271,132 +250,94 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
     }, [isOpen]);
 
     return (
-        <div className="sidebar-container">
+        <div className={`sidebar-container ${isOpen ? 'open' : ''}`}>
             <BurgerButton isOpen={isOpen} onClick={() => setIsOpen(!isOpen)} />
 
             <div className={`sidebar ${isOpen ? 'open' : ''}`}>
-                <h2>Konichiwa, {userName}!</h2>
+                <div className="sidebar-header">
+                    <h2>Hey, {userName}!</h2>
+                    <button
+                        className="sidebar-close-button"
+                        onClick={() => setIsOpen(false)}
+                        type="button"
+                        aria-label="Close sidebar"
+                    >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
                 <form onSubmit={handleUpload} className="upload-section">
-                    {/* File Pickers Section */}
-                    <input
-                        ref={audioInputRef}
-                        type="file"
-                        id="file-upload-audio"
-                        accept="audio/*"
-                        style={{ marginBottom: '10px' }}
-                        disabled={isUploading}
-                        onChange={handleAudioFileChange}
-                    />
-                    <input
-                        ref={thumbnailInputRef}
-                        id="file-upload-thumbnail"
-                        type="file"
-                        accept="image/*"
-                        style={{ marginBottom: '10px' }}
-                        disabled={isUploading}
-                    />
-                    <label htmlFor="file-upload-audio">
-                        {audioInputRef.current?.files?.[0]?.name ||
-                            'Choose Audio File'}
-                    </label>
-                    <label htmlFor="file-upload-thumbnail">
-                        {thumbnailInputRef.current?.files?.[0]?.name ||
-                            (extractedThumbnail
-                                ? 'Thumbnail (Auto-detected)'
-                                : 'Choose Thumbnail (Optional)')}
-                    </label>
+                    <div className="form-group">
+                        <input
+                            ref={audioInputRef}
+                            type="file"
+                            id="file-upload-audio"
+                            accept="audio/*"
+                            disabled={isUploading}
+                            onChange={handleAudioFileChange}
+                        />
+                        <input
+                            ref={thumbnailInputRef}
+                            id="file-upload-thumbnail"
+                            type="file"
+                            accept="image/*"
+                            disabled={isUploading}
+                        />
+                        <input
+                            ref={videoInputRef}
+                            id="file-upload-video"
+                            type="file"
+                            accept="video/*"
+                            disabled={isUploading}
+                        />
+                        <label htmlFor="file-upload-audio">
+                            {audioInputRef.current?.files?.[0]?.name || 'Choose Audio File'}
+                        </label>
+                        <label htmlFor="file-upload-thumbnail">
+                            {thumbnailInputRef.current?.files?.[0]?.name ||
+                                (extractedThumbnail ? 'Cover Art (Auto-detected)' : 'Choose Cover Art')}
+                        </label>
+                        <label htmlFor="file-upload-video">
+                            {videoInputRef.current?.files?.[0]?.name || 'Choose Video (Optional)'}
+                        </label>
+                    </div>
 
-                    {/* Basic Information Section */}
                     <div className="section-header">
-                        <h3>Basic Information</h3>
+                        <h3>Track Information</h3>
                     </div>
 
-                    {/* Song Title */}
-                    <input
-                        type="text"
-                        placeholder="Song Title"
-                        value={songTitle}
-                        onChange={(e) => setSongTitle(e.target.value)}
-                        style={{ marginBottom: '10px' }}
-                        disabled={isUploading}
-                    />
-
-                    {/* Album Name with suggestions */}
-                    <div
-                        className="input-container"
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="form-group">
                         <input
                             type="text"
-                            placeholder="Album Name"
-                            value={albumName}
-                            onChange={(e) => setAlbumName(e.target.value)}
-                            onFocus={() => setShowAlbumSuggestions(true)}
-                            style={{ marginBottom: '10px' }}
+                            placeholder="Track Title"
+                            value={songTitle}
+                            onChange={(e) => setSongTitle(e.target.value)}
                             disabled={isUploading}
                         />
-                        {showAlbumSuggestions &&
-                            suggestions.albums.length > 0 && (
-                                <div className="suggestions">
-                                    {suggestions.albums
-                                        .filter((album) =>
-                                            album
-                                                .toLowerCase()
-                                                .includes(
-                                                    albumName.toLowerCase(),
-                                                ),
-                                        )
-                                        .map((album) => (
-                                            <div
-                                                key={album}
-                                                onClick={() => {
-                                                    setAlbumName(album);
-                                                    setShowAlbumSuggestions(
-                                                        false,
-                                                    );
-                                                }}
-                                                className="suggestion-item"
-                                            >
-                                                {album}
-                                            </div>
-                                        ))}
-                                </div>
-                            )}
-                    </div>
 
-                    {/* Artist Name with suggestions */}
-                    <div
-                        className="input-container"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <input
-                            type="text"
-                            placeholder="Artist Name"
-                            value={artistName}
-                            onChange={(e) => setArtistName(e.target.value)}
-                            onFocus={() => setShowArtistSuggestions(true)}
-                            style={{ marginBottom: '10px' }}
-                            disabled={isUploading}
-                        />
-                        {showArtistSuggestions &&
-                            suggestions.artists.length > 0 && (
+                        <div className="input-container" onClick={(e) => e.stopPropagation()}>
+                            <input
+                                type="text"
+                                placeholder="Artist Name"
+                                value={artistName}
+                                onChange={(e) => setArtistName(e.target.value)}
+                                onFocus={() => setShowArtistSuggestions(true)}
+                                disabled={isUploading}
+                            />
+                            {showArtistSuggestions && suggestions.artists.length > 0 && (
                                 <div className="suggestions">
                                     {suggestions.artists
                                         .filter((artist) =>
-                                            artist
-                                                .toLowerCase()
-                                                .includes(
-                                                    artistName.toLowerCase(),
-                                                ),
+                                            artist.toLowerCase().includes(artistName.toLowerCase()),
                                         )
                                         .map((artist) => (
                                             <div
                                                 key={artist}
                                                 onClick={() => {
                                                     setArtistName(artist);
-                                                    setShowArtistSuggestions(
-                                                        false,
-                                                    );
+                                                    setShowArtistSuggestions(false);
                                                 }}
                                                 className="suggestion-item"
                                             >
@@ -405,97 +346,96 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                                         ))}
                                 </div>
                             )}
-                    </div>
+                        </div>
 
-                    {/* Freeform genre input with suggestions (datalist) */}
-                    <input
-                        list="genre-suggestions"
-                        value={genre}
-                        onChange={(e) => setGenre(e.target.value)}
-                        placeholder="Genre"
-                        style={{ marginBottom: '10px' }}
-                        disabled={isUploading}
-                        className="genre-input"
-                    />
-                    <datalist id="genre-suggestions">
-                        {(topGenres.length ? topGenres : Array.from(GENRES)).map((g) => (
-                            <option key={g} value={g} />
-                        ))}
-                    </datalist>
-
-                    {/* Visibility Select */}
-                    <div className="visibility-container">
-                        <label className="visibility-label">
-                            <span className="visibility-icon-text">
-                                <span>
-                                    {visibility === 'public' ? '🌐' : '🔒'}
-                                </span>
-                                <span>
-                                    {visibility === 'public'
-                                        ? 'Public'
-                                        : 'Private'}
-                                </span>
-                            </span>
-                            <select
-                                value={visibility}
-                                onChange={(e) =>
-                                    setVisibility(
-                                        e.target.value as 'public' | 'private',
-                                    )
-                                }
+                        <div className="input-container" onClick={(e) => e.stopPropagation()}>
+                            <input
+                                type="text"
+                                placeholder="Album Name"
+                                value={albumName}
+                                onChange={(e) => setAlbumName(e.target.value)}
+                                onFocus={() => setShowAlbumSuggestions(true)}
                                 disabled={isUploading}
-                                className="visibility-select"
-                                style={{
-                                    width: 'auto',
-                                    padding: '6px 10px',
-                                    fontSize: '0.9rem',
-                                    marginBottom: '0',
-                                }}
-                            >
-                                <option value="public">Public</option>
-                                <option value="private">Private</option>
-                            </select>
-                        </label>
-                        <p className="visibility-description">
-                            {visibility === 'public'
-                                ? 'Everyone can see and play this song'
-                                : 'Only you can see and play this song'}
-                        </p>
+                            />
+                            {showAlbumSuggestions && suggestions.albums.length > 0 && (
+                                <div className="suggestions">
+                                    {suggestions.albums
+                                        .filter((album) =>
+                                            album.toLowerCase().includes(albumName.toLowerCase()),
+                                        )
+                                        .map((album) => (
+                                            <div
+                                                key={album}
+                                                onClick={() => {
+                                                    setAlbumName(album);
+                                                    setShowAlbumSuggestions(false);
+                                                }}
+                                                className="suggestion-item"
+                                            >
+                                                {album}
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <input
+                            list="genre-suggestions"
+                            value={genre}
+                            onChange={(e) => setGenre(e.target.value)}
+                            placeholder="Genre"
+                            disabled={isUploading}
+                            className="genre-input"
+                        />
+                        <datalist id="genre-suggestions">
+                            {(topGenres.length ? topGenres : Array.from(GENRES)).map((g) => (
+                                <option key={g} value={g} />
+                            ))}
+                        </datalist>
+
+                        <div className="visibility-container">
+                            <label className="visibility-label">
+                                <span className="visibility-icon-text">
+                                    <span>{visibility === 'public' ? '🌍' : '🔒'}</span>
+                                    <span>{visibility === 'public' ? 'Public' : 'Private'}</span>
+                                </span>
+                                <select
+                                    value={visibility}
+                                    onChange={(e) => setVisibility(e.target.value as 'public' | 'private')}
+                                    disabled={isUploading}
+                                    className="visibility-select"
+                                >
+                                    <option value="public">Public</option>
+                                    <option value="private">Private</option>
+                                </select>
+                            </label>
+                            <p className="visibility-description">
+                                {visibility === 'public' ? 'Visible to all users' : 'Only visible to you'}
+                            </p>
+                        </div>
                     </div>
 
-                    {/* Advanced Options Toggle */}
                     <button
                         type="button"
                         onClick={() => setShowAdvanced(!showAdvanced)}
-                        style={{ marginBottom: '10px' }}
-                        className="advanced-toggle"
+                        className={`advanced-toggle ${showAdvanced ? 'open' : ''}`}
                         disabled={isUploading}
                     >
-                        {showAdvanced
-                            ? '▼ Hide Additional Details'
-                            : '▶ Show Additional Details (Optional)'}
+                        Additional Metadata
                     </button>
 
-                    {/* Advanced Options */}
                     {showAdvanced && (
                         <div className="advanced-options">
                             <div className="section-header">
-                                <h3>Additional Details</h3>
+                                <h3>Extended Details</h3>
                             </div>
 
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    gap: '10px',
-                                    width: '100%',
-                                }}
-                            >
+                            <div style={{ display: 'flex', gap: '12px' }}>
                                 <input
                                     type="number"
                                     placeholder="Year"
                                     value={year}
                                     onChange={(e) => setYear(e.target.value)}
-                                    style={{ marginBottom: '10px', flex: 1 }}
                                     disabled={isUploading}
                                     min="1900"
                                     max="2100"
@@ -506,7 +446,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                                     placeholder="BPM"
                                     value={bpm}
                                     onChange={(e) => setBpm(e.target.value)}
-                                    style={{ marginBottom: '10px', flex: 1 }}
                                     disabled={isUploading}
                                     min="1"
                                     max="300"
@@ -515,10 +454,9 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
 
                             <input
                                 type="text"
-                                placeholder="Mood (e.g., Happy, Melancholic, Energetic)"
+                                placeholder="Mood"
                                 value={mood}
                                 onChange={(e) => setMood(e.target.value)}
-                                style={{ marginBottom: '10px' }}
                                 disabled={isUploading}
                             />
 
@@ -527,7 +465,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                                 placeholder="Language"
                                 value={language}
                                 onChange={(e) => setLanguage(e.target.value)}
-                                style={{ marginBottom: '10px' }}
                                 disabled={isUploading}
                                 maxLength={10}
                             />
@@ -537,25 +474,20 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                                 placeholder="Tags (comma-separated)"
                                 value={tags}
                                 onChange={(e) => setTags(e.target.value)}
-                                style={{ marginBottom: '10px' }}
                                 disabled={isUploading}
                             />
 
                             <textarea
-                                placeholder="Lyrics (optional)"
+                                placeholder="Lyrics"
                                 value={lyrics}
                                 onChange={(e) => setLyrics(e.target.value)}
-                                style={{
-                                    marginBottom: '10px',
-                                    minHeight: '80px',
-                                }}
                                 disabled={isUploading}
                             />
                         </div>
                     )}
 
                     <button type="submit" disabled={isUploading}>
-                        {isUploading ? '⏳ Uploading...' : '☁️ Upload Song'}
+                        {isUploading ? 'Uploading' : 'Upload Track'}
                     </button>
                 </form>
             </div>

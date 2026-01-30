@@ -21,12 +21,12 @@
     background: var(--primary-color);
     border-color: rgba(255, 255, 255, 0.2);
     box-shadow:
-        0 4px 12px rgba(0, 0, 0, 0.1),
-        0 0 0 4px rgba(110, 37, 74, 0.2);
+            0 4px 12px rgba(0, 0, 0, 0.1),
+            0 0 0 4px rgba(110, 37, 74, 0.2);
 }
 
 .burger-button.open {
-    left: calc(20vw - 64px);
+    left: calc(320px - 54px);
 }
 
 /* Burger Icon */
@@ -108,4 +108,11 @@
 .burger-button.open {
     animation: pulse 2s infinite;
     background: rgba(110, 37, 74, 0.95);
+}
+
+/* Mobile positioning */
+@media (max-width: 768px) {
+    .burger-button.open {
+        left: calc(100vw - 54px);
+    }
 }

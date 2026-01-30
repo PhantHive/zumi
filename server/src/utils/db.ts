@@ -3,6 +3,7 @@ import { Database } from 'sqlite3';
 import { DatabaseConfig } from '../types/interfaces.js';
 import { Song } from '../../../shared/types/common.js';
 import path from 'path';
+import fs from 'fs';
 
 export const GENRES = [
     'Epic',
@@ -534,10 +535,40 @@ export class DbClient {
 
 // Determine database path based on environment
 const isDev = process.env.NODE_ENV === 'development';
-const DB_PATH = isDev
-    ? path.join(process.cwd(), 'music.db')
-    : '/app/database/music.db';
+const defaultLocalDb = path.join(process.cwd(), 'music.db');
+const prodDb = '/app/database/music.db';
+const envDb = process.env.DATABASE_PATH;
+
+let DB_PATH = envDb ?? (isDev ? defaultLocalDb : prodDb);
+
+// Ensure directory for DB exists when possible; if creation fails, fall back to local DB
+try {
+    const dbDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+        console.log('Created database directory:', dbDir);
+    }
+} catch (err) {
+    console.warn(
+        `Could not create database directory for '${DB_PATH}'. Falling back to local DB file.`,
+        err,
+    );
+    DB_PATH = defaultLocalDb;
+}
+
+// If the chosen DB path is not writable or cannot be used, fallback to local DB
+try {
+    // Try to open file for appending to check writability (this will create the file if allowed)
+    fs.openSync(DB_PATH, 'a');
+} catch (err) {
+    console.warn(
+        `Cannot use database file at '${DB_PATH}' (will fallback to local '${defaultLocalDb}'):`,
+        err,
+    );
+    DB_PATH = defaultLocalDb;
+}
 
 console.log('Using database path:', DB_PATH);
 
 export const db = new DbClient({ filename: DB_PATH });
+

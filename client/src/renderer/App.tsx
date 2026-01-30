@@ -4,9 +4,11 @@ import { Song, Album } from '../../../shared/types/common';
 import Player from './components/Player';
 import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
+import PinLock from './components/PinLock';
 import './styles/global.css';
 import { apiClient } from './utils/apiClient';
 import ZumiChan from './components/ZumiChan';
+import { ipcRenderer } from 'electron';
 
 interface SongsResponse {
     data: Song[];
@@ -19,9 +21,69 @@ const App: React.FC = () => {
     const [showZumiChan] = useState(true);
     const [isZumiChanOpen, setIsZumiChanOpen] = useState(false);
 
+    // PIN lock states
+    const [hasPin, setHasPin] = useState<boolean>(false);
+    const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+    const [isCheckingPin, setIsCheckingPin] = useState<boolean>(true);
+
     useEffect(() => {
-        fetchSongs();
+        // Wait for main-ready with a timeout before running checks
+        const waitForMainReady = async () => {
+            try {
+                await new Promise<void>((resolve) => {
+                    const timeout = setTimeout(() => resolve(), 2000);
+                    try {
+                        ipcRenderer.once('main-ready', (_event, data) => {
+                            clearTimeout(timeout);
+                            if (data && data.apiPort) (window as any).__API_PORT__ = data.apiPort;
+                            resolve();
+                        });
+                    } catch (err) {
+                        clearTimeout(timeout);
+                        resolve();
+                    }
+                });
+            } catch (err) {
+                // ignore
+            }
+
+            // Check if PIN is set
+            const checkPin = async () => {
+                try {
+                    const hasPinSet = await ipcRenderer.invoke('pin:has-pin');
+                    setHasPin(hasPinSet);
+                    setIsUnlocked(!hasPinSet); // If no PIN, unlock automatically
+                } catch (error) {
+                    const msg = error instanceof Error ? error.message : String(error);
+                    if (
+                        msg.includes('No handler registered') ||
+                        msg.includes('ipcRenderer is not defined') ||
+                        msg.includes('not implemented') ||
+                        msg.includes('invoke')
+                    ) {
+                        console.warn('IPC not available; keeping UI locked for safety');
+                        setHasPin(false);
+                        setIsUnlocked(false);
+                    } else {
+                        console.error('Error checking PIN:', error);
+                        setIsUnlocked(false);
+                    }
+                } finally {
+                    setIsCheckingPin(false);
+                }
+            };
+
+            checkPin();
+        };
+
+        waitForMainReady();
     }, []);
+
+    useEffect(() => {
+        if (isUnlocked) {
+            fetchSongs();
+        }
+    }, [isUnlocked]);
 
     const handleZumiWave = () => {
         setIsZumiChanOpen(!isZumiChanOpen);
@@ -38,7 +100,7 @@ const App: React.FC = () => {
                 if (!albumMap[song.albumId]) {
                     albumMap[song.albumId] = {
                         id: song.albumId,
-                        name: song.albumId, // Assuming album name is the same as albumId
+                        name: song.albumId,
                         songs: [],
                     };
                 }
@@ -65,11 +127,29 @@ const App: React.FC = () => {
                 const randomSong =
                     randomAlbum.songs[
                         Math.floor(Math.random() * randomAlbum.songs.length)
-                    ];
+                        ];
                 setCurrentSong(randomSong);
             }
         }
     };
+
+    const handleUnlock = () => {
+        setIsUnlocked(true);
+    };
+
+    // Show loading while checking PIN
+    if (isCheckingPin) {
+        return (
+            <div className="loading-container">
+                <div className="loading-text">Loading...</div>
+            </div>
+        );
+    }
+
+    // Show PIN lock if PIN is set and not unlocked
+    if (hasPin && !isUnlocked) {
+        return <PinLock onUnlock={handleUnlock} />;
+    }
 
     return (
         <>
@@ -105,9 +185,9 @@ const App: React.FC = () => {
                             );
                             const nextSong =
                                 currentAlbum.songs[
-                                    (currentIndex + 1) %
-                                        currentAlbum.songs.length
-                                ];
+                                (currentIndex + 1) %
+                                currentAlbum.songs.length
+                                    ];
                             setCurrentSong(nextSong);
                         }
                     }}
@@ -121,15 +201,15 @@ const App: React.FC = () => {
                             );
                             const prevSong =
                                 currentAlbum.songs[
-                                    (currentIndex -
-                                        1 +
-                                        currentAlbum.songs.length) %
-                                        currentAlbum.songs.length
-                                ];
+                                (currentIndex -
+                                    1 +
+                                    currentAlbum.songs.length) %
+                                currentAlbum.songs.length
+                                    ];
                             setCurrentSong(prevSong);
                         }
                     }}
-                    onRandomSong={handleRandomSong} // Add this prop
+                    onRandomSong={handleRandomSong}
                 />
             </div>
         </>
@@ -137,3 +217,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

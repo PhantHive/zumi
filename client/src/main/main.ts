@@ -8,9 +8,29 @@ import { AuthHandler } from './auth.js';
 import { fileURLToPath } from 'url';
 import { ThumbnailToolbar } from './thumbnailToolbar.js';
 import { promises as fs } from 'fs';
+import { setupPinHandlers } from './pinHandler';
 
 const discordRPC = new DiscordPresence();
 const authHandler = new AuthHandler();
+
+// Ensure IPC handlers that the renderer may call early are registered now
+try {
+    // Setup PIN handlers immediately so renderer checks won't race
+    setupPinHandlers();
+    // Provide runtime API port to renderer on demand (early)
+    ipcMain.handle('get-runtime-api-port', () => {
+        try {
+            const runtimeApiPort = process.env.API_PORT || process.env.PORT || null;
+            console.log('get-runtime-api-port called, returning:', runtimeApiPort);
+            return runtimeApiPort;
+        } catch (err) {
+            console.error('Error in get-runtime-api-port handler:', err);
+            return null;
+        }
+    });
+} catch (err) {
+    console.warn('Early IPC handler registration failed (continuing):', err);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,7 +58,6 @@ async function createWindow() {
         win.webContents.send('app-reset');
     });
 
-    // Add these event listeners
     win.webContents.on(
         'did-fail-load',
         (event, errorCode, errorDescription) => {
@@ -48,8 +67,19 @@ async function createWindow() {
 
     win.webContents.on('did-finish-load', () => {
         console.log('Finished loading');
-        // Open DevTools in production to debug
         win.webContents.openDevTools();
+        // Notify renderer that main is ready and provide runtime API info
+        try {
+            const runtimeApiPort = process.env.API_PORT || process.env.PORT || null;
+            const runtimeApiUrl = runtimeApiPort ? `http://localhost:${runtimeApiPort}` : null;
+            win.webContents.send('main-ready', {
+                apiPort: runtimeApiPort,
+                apiUrl: runtimeApiUrl,
+            });
+            console.log('Sent main-ready to renderer with API info:', runtimeApiUrl);
+        } catch (err) {
+            console.warn('Failed to send main-ready message:', err);
+        }
     });
 
     win.setThumbnailToolTip('Zumi Chan');
@@ -87,7 +117,6 @@ async function createWindow() {
         console.log('Attempting to load renderer from:', rendererPath);
 
         try {
-            // Check if file exists using async/await
             const fileExists = await fs
                 .access(rendererPath)
                 .then(() => true)
@@ -98,7 +127,6 @@ async function createWindow() {
                 await win.loadFile(rendererPath);
             } else {
                 console.error('File does not exist at path:', rendererPath);
-                // Try listing contents of renderer directory
                 const rendererDir = path.resolve(__dirname, '../../renderer');
                 try {
                     const files = await fs.readdir(rendererDir);
@@ -121,34 +149,28 @@ app.whenReady().then(async () => {
         console.log('Stored tokens:', storedTokens);
         if (storedTokens?.access_token) {
             console.log('Found stored credentials, validating with server...');
-            await authHandler.validateWithServer(storedTokens.access_token);
+            try {
+                const validation = await authHandler.validateWithServer(storedTokens.access_token);
+                if (!validation || !validation.token) {
+                    console.warn('Initial server validation did not return a token, clearing stored server token');
+                    authHandler.clearServerToken();
+                }
+            } catch (err) {
+                console.error('Error validating stored credentials:', err);
+                // Clear stored server token if validation failed (network or server error)
+                try {
+                    authHandler.clearServerToken();
+                } catch (clearErr) {
+                    console.error('Failed to clear stored server token after validation error:', clearErr);
+                }
+            }
         }
     } catch (error) {
-        console.error('Error validating stored credentials:', error);
+        console.error('Error reading stored tokens:', error);
     }
-    // session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    //     callback({
-    //         responseHeaders: {
-    //             ...details.responseHeaders,
-    //             'Content-Security-Policy': [
-    //                 "default-src 'self';" +
-    //                 "script-src 'self' 'unsafe-inline';" +
-    //                 "style-src 'self' 'unsafe-inline';" +
-    //                 `connect-src 'self' ${API_URL};` +
-    //                 // Update img-src to include your server URL
-    //                 `img-src 'self' data: blob: ${API_URL};` +
-    //                 "font-src 'self';" +
-    //                 "object-src 'none';" +
-    //                 "media-src 'self' blob:;" +
-    //                 "frame-src 'none'",
-    //             ],
-    //         },
-    //     });
-    // });
 
     const isDev = process.env.NODE_ENV === 'development';
 
-    // Only set up protocol client in production
     if (!isDev) {
         if (process.defaultApp) {
             if (process.argv.length >= 2) {
@@ -161,7 +183,6 @@ app.whenReady().then(async () => {
         }
     }
 
-    // Handle callback in production
     app.on('open-url', (event, url) => {
         event.preventDefault();
         if (!isDev) {
@@ -171,13 +192,12 @@ app.whenReady().then(async () => {
 
     const win = BrowserWindow.getFocusedWindow();
 
-    // Register ipcMain.handle calls here
     ipcMain.handle('window-is-maximized', () => {
         console.log('window-is-maximized handler registered');
         return win?.isMaximized();
     });
 
-    // Register auth handlers as soon as possible
+    // Register auth handlers
     ipcMain.handle('auth:sign-in', async () => {
         console.log('auth:sign-in handler invoked');
         try {
@@ -200,11 +220,54 @@ app.whenReady().then(async () => {
             const serverToken = authHandler.getServerToken();
             console.log('Server token exists:', !!serverToken);
 
-            return {
-                success: true,
-                data: userInfo,
-                token: serverToken, // Include server token
-            };
+            // Only consider the user authenticated if we have a server-side JWT
+            if (!serverToken) {
+                console.warn('User has Google tokens but no server JWT; treating as unauthenticated');
+                return { success: false, error: 'Not authenticated with server' };
+            }
+
+            // Validate the server JWT with the backend to ensure it's still valid
+            try {
+                const runtimeApiPort = process.env.API_PORT || process.env.PORT || null;
+                const apiBase = runtimeApiPort ? `http://localhost:${runtimeApiPort}` : undefined;
+                const profileUrl = apiBase ? `${apiBase}/api/auth/profile` : undefined;
+
+                const urlToCall = profileUrl || `http://${process.env.VPS_IP}:${process.env.API_PORT}/api/auth/profile`;
+
+                console.log('Validating server JWT with backend at:', urlToCall);
+
+                const res = await fetch(urlToCall, {
+                    headers: {
+                        Authorization: `Bearer ${serverToken}`,
+                        Accept: 'application/json',
+                    },
+                });
+
+                if (!res.ok) {
+                    console.warn('Server JWT validation failed, clearing stored token. Status:', res.status);
+                    authHandler.clearServerToken();
+                    return { success: false, error: 'Server token invalid' };
+                }
+
+                const profileData = await res.json();
+
+                // Return authenticated with server-validated profile
+                return {
+                    success: true,
+                    data: profileData.data || profileData,
+                    token: serverToken,
+                };
+            } catch (err) {
+                console.error('Error validating server token with backend:', err);
+                // If validation failed due to network, be conservative and clear token so user is not treated as authenticated
+                try {
+                    authHandler.clearServerToken();
+                } catch (clearErr) {
+                    console.error('Failed to clear server token after validation error:', clearErr);
+                }
+
+                return { success: false, error: 'Server validation error' };
+            }
         } catch (error: unknown) {
             if (error instanceof Error) {
                 console.error('Get user info error:', error.message);
@@ -236,21 +299,21 @@ app.on('window-all-closed', () => {
         window.webContents.send('app-reset');
     });
 
-    // Your existing code
     if (process.platform !== 'darwin') {
         app.quit();
     }
 });
 
-// For macOS: re-create window when dock icon is clicked
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
     }
 });
 
-// Handle auth callback URLs
 app.on('open-url', (event, url) => {
     event.preventDefault();
     authHandler.handleCallback(url);
 });
+
+export default app;
+
