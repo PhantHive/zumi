@@ -1,103 +1,132 @@
 #!/usr/bin/env python3
+"""
+YouTube Search Script using yt-dlp
+Reads JSON from stdin: { "query": "search query", "limit": 10 }
+Outputs JSON with search results
+"""
+
 import sys
 import json
-import os
 import yt_dlp
 
-# Read JSON input from stdin
-# Expected: { "urls": ["..."], "output_audio_dir": "...", "output_thumbnail_dir": "..." }
 
-def safe_mkdir(p):
+def search_youtube(query, limit=10):
+    """Search YouTube and return video information"""
+    results = []
+
     try:
-        os.makedirs(p, exist_ok=True)
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,  # Don't download, just get metadata
+            'skip_download': True,
+            'playlistend': limit,  # Limit results
+        }
+
+        # Use ytsearch: prefix to search YouTube
+        search_query = f"ytsearch{limit}:{query}"
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(search_query, download=False)
+
+            if not info or 'entries' not in info:
+                return []
+
+            for entry in info['entries']:
+                if not entry:
+                    continue
+
+                video_id = entry.get('id')
+                if not video_id:
+                    continue
+
+                # Extract thumbnail - get best quality available
+                thumbnail = None
+                thumbnails = entry.get('thumbnails', [])
+                if thumbnails:
+                    # Try to get medium or high quality thumbnail
+                    for thumb in reversed(thumbnails):
+                        if thumb.get('url'):
+                            thumbnail = thumb['url']
+                            break
+
+                # Parse duration
+                duration = entry.get('duration')
+                if duration is None:
+                    # Try to get from duration_string
+                    duration_string = entry.get('duration_string', '')
+                    if duration_string:
+                        try:
+                            # Parse duration like "3:45" or "1:23:45"
+                            parts = duration_string.split(':')
+                            if len(parts) == 2:  # MM:SS
+                                duration = int(parts[0]) * 60 + int(parts[1])
+                            elif len(parts) == 3:  # HH:MM:SS
+                                duration = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+                        except:
+                            duration = None
+
+                result = {
+                    'id': video_id,
+                    'title': entry.get('title', ''),
+                    'uploader': entry.get('uploader') or entry.get('channel', ''),
+                    'thumbnail': thumbnail or f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
+                    'durationSeconds': duration,
+                    'url': f"https://www.youtube.com/watch?v={video_id}",
+                    'channelTitle': entry.get('channel') or entry.get('uploader', ''),
+                }
+
+                results.append(result)
+
+        return results
+
     except Exception as e:
-        print(f"__ERROR_MKDIR__:{e}", file=sys.stderr)
-
-
-def find_thumbnail(output_dir, video_id):
-    for ext in ['jpg', 'jpeg', 'webp', 'png']:
-        candidate = os.path.join(output_dir, f"{video_id}.{ext}")
-        if os.path.exists(candidate):
-            return candidate
-    return None
+        # Return error in a structured way
+        print(json.dumps({'error': str(e)}), file=sys.stderr)
+        return []
 
 
 def main():
     try:
+        # Read JSON input from stdin
         raw = sys.stdin.read()
-        if not raw:
-            print(json.dumps({"error": "no input"}))
-            return
+
+        if not raw or not raw.strip():
+            output = {'error': 'No input provided'}
+            print(json.dumps(output))
+            sys.exit(1)
+
         payload = json.loads(raw)
-        urls = payload.get('urls') or []
-        output_audio_dir = payload.get('output_audio_dir') or '.'
-        output_thumbnail_dir = payload.get('output_thumbnail_dir') or output_audio_dir
+        query = payload.get('query', '').strip()
+        limit = int(payload.get('limit', 10))
 
-        safe_mkdir(output_audio_dir)
-        safe_mkdir(output_thumbnail_dir)
+        if not query:
+            output = {'error': 'Query is required'}
+            print(json.dumps(output))
+            sys.exit(1)
 
-        results = []
+        # Perform search
+        results = search_youtube(query, limit)
 
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(output_audio_dir, '%(id)s.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'writethumbnail': True,
-            'noplaylist': True,
-            'quiet': True,
-            'no_warnings': True,
+        # Output results as JSON
+        output = {
+            'results': results,
+            'count': len(results),
+            'query': query
         }
 
-        for url in urls:
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
+        print(json.dumps(output))
+        sys.exit(0)
 
-                    video_id = info.get('id')
-                    title = info.get('title')
-                    uploader = info.get('uploader') or info.get('uploader_id')
-                    duration = info.get('duration')
-                    webpage_url = info.get('webpage_url') or url
+    except json.JSONDecodeError as e:
+        output = {'error': f'Invalid JSON input: {str(e)}'}
+        print(json.dumps(output))
+        sys.exit(1)
 
-                    # After download, audio will be at {id}.mp3
-                    audio_file = os.path.join(output_audio_dir, f"{video_id}.mp3")
-
-                    # Thumbnail may have been written in output_audio_dir with id.ext, or ytdlp may have saved to same dir
-                    thumbnail = find_thumbnail(output_audio_dir, video_id)
-                    if not thumbnail and output_thumbnail_dir != output_audio_dir:
-                        thumbnail = find_thumbnail(output_thumbnail_dir, video_id)
-
-                    # If thumbnail exists but is not in the dedicated thumbnails dir, try to copy it
-                    final_thumbnail = None
-                    if thumbnail:
-                        try:
-                            base_ext = os.path.splitext(thumbnail)[1]
-                            final_thumbnail = os.path.join(output_thumbnail_dir, f"{video_id}{base_ext}")
-                            if os.path.abspath(thumbnail) != os.path.abspath(final_thumbnail):
-                                import shutil
-                                shutil.copyfile(thumbnail, final_thumbnail)
-                        except Exception as e:
-                            final_thumbnail = thumbnail
-
-                    results.append({
-                        'id': video_id,
-                        'title': title,
-                        'uploader': uploader,
-                        'duration': duration,
-                        'audio_file': audio_file,
-                        'thumbnail_file': final_thumbnail,
-                        'video_url': webpage_url,
-                    })
-            except Exception as e:
-                results.append({'error': str(e), 'url': url})
-
-        sys.stdout.write(json.dumps(results))
     except Exception as e:
-        sys.stdout.write(json.dumps({'error': str(e)}))
+        output = {'error': str(e)}
+        print(json.dumps(output))
+        sys.exit(1)
 
 
 if __name__ == '__main__':

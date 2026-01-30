@@ -8,6 +8,7 @@ import connectDB from './utils/mongoose.js';
 import dotenv from 'dotenv';
 import auth from './middlewares/auth.js';
 import authRoutes from './routes/authRoutes.js';
+import youtubeRoutes from './routes/youtubeRoutes.js'; // ADD THIS LINE
 
 // Load environment variables
 dotenv.config();
@@ -40,7 +41,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../../public')));
 app.use('/uploads', express.static(path.join(staticPaths.uploads)));
 app.use('/data', express.static(staticPaths.data));
-app.use('/videos', express.static(staticPaths.videos)); // NEW: Serve video files
+app.use('/videos', express.static(staticPaths.videos)); // Video files static serving
 
 // Serve mobile releases (APK files)
 app.use('/mobile', express.static('/opt/zumi-mobile/releases'));
@@ -69,6 +70,7 @@ app.use((req, res, next) => {
 // Routes
 app.use('/api/auth', authRoutes); // Auth routes should be public
 app.use('/api/songs', auth, songRoutes); // Protect song routes with auth middleware
+app.use('/api/youtube', youtubeRoutes); // ADD THIS LINE - YouTube search & functionality
 
 // Mobile version check endpoint
 app.get('/api/mobile/version', (req, res) => {
