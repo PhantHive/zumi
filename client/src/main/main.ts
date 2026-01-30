@@ -293,7 +293,7 @@ app.whenReady().then(async () => {
         console.log('pin:has-pin handler invoked');
         try {
             // Check if authHandler's store has a pinHash
-            const store = (authHandler as any).store;
+            const store = authHandler.store;
             if (!store) {
                 return { success: false, hasPinSet: false };
             }
@@ -315,7 +315,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('pin:set', async (_event, pinHash: string) => {
         console.log('pin:set handler invoked');
         try {
-            const store = (authHandler as any).store;
+            const store = authHandler.store;
             if (!store) {
                 throw new Error('Store not initialized');
             }
@@ -335,7 +335,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('pin:verify', async (_event, pinHash: string) => {
         console.log('pin:verify handler invoked');
         try {
-            const store = (authHandler as any).store;
+            const store = authHandler.store;
             if (!store) {
                 throw new Error('Store not initialized');
             }
@@ -367,7 +367,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('pin:delete', async () => {
         console.log('pin:delete handler invoked');
         try {
-            const store = (authHandler as any).store;
+            const store = authHandler.store;
             if (!store) {
                 throw new Error('Store not initialized');
             }
@@ -409,4 +409,3 @@ app.on('open-url', (event, url) => {
 });
 
 export default app;
-

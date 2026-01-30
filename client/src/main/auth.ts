@@ -49,7 +49,7 @@ export class AuthHandler {
         resolve: (value: string) => void;
         reject: (reason?: unknown) => void;
     } | null = null;
-    private store: Store<StoreSchema> | undefined;
+    public store: Store<StoreSchema> | undefined;
 
     constructor() {
         this.logToFile('Initializing AuthHandler...');
