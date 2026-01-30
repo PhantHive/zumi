@@ -2,7 +2,7 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install packages (removed ffmpeg, removed python3-pip)
+# Install system packages (NO pip needed!)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     curl \
@@ -24,27 +24,30 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Use ensurepip instead of apt package
-RUN python3 -m ensurepip --upgrade
-
-# Install yt-dlp
-RUN python3 -m pip install --no-cache-dir yt-dlp
+# Install yt-dlp BINARY (no Python module needed!)
+RUN curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+    chmod +x /usr/local/bin/yt-dlp
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV CHROME_PATH=/usr/bin/chromium
 
+# Copy package files
 COPY package*.json ./
 RUN npm install
 
+# Copy built server files
 COPY dist/ ./dist/
 COPY shared/ ./shared/
 
-# Add Python tools
+# Copy Python tools directory (script calls yt-dlp binary)
 COPY server/tools/ ./server/tools/
 RUN chmod +x ./server/tools/*.py
 
+# Create config directory (will be mounted at runtime)
 RUN mkdir -p /app/config
+
+# Create necessary directories with correct permissions
 RUN mkdir -p /app/uploads/thumbnails /app/data /app/database && \
     chmod -R 775 /app/uploads /app/data /app/database
 
