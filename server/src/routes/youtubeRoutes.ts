@@ -10,25 +10,22 @@ const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-interface SearchQuery {
-    q: string;
-    limit?: string;
-}
-
 /**
  * GET /api/youtube/search
  * Search YouTube videos using Python yt-dlp
  */
 router.get('/search', auth, async (req: Request, res: Response) => {
     try {
-        const { q, limit = '10' } = req.query as SearchQuery;
+        // Extract query parameters with proper type handling
+        const q = req.query.q as string | undefined;
+        const limitStr = req.query.limit as string | undefined;
 
         if (!q || !q.trim()) {
             res.status(400).json({ error: 'Search query is required' });
             return;
         }
 
-        const maxResults = Math.min(parseInt(limit, 10) || 10, 50);
+        const maxResults = Math.min(parseInt(limitStr || '10', 10) || 10, 50);
         const scriptPath = path.resolve(process.cwd(), 'server', 'tools', 'youtube_search.py');
 
         const results = await searchYouTubeWithPython(q, maxResults, scriptPath);
