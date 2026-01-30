@@ -220,7 +220,13 @@ router.post('/import-youtube', async (req: Request, res: Response) => {
         res.json({ data: results });
     } catch (error) {
         console.error('YouTube import failed:', error);
-        res.status(500).json({ error: 'Failed to import from YouTube' });
+        // In development return the detailed error so clients can display it for debugging
+        if (isDev) {
+            const message = error instanceof Error ? error.message : String(error);
+            res.status(500).json({ error: message });
+        } else {
+            res.status(500).json({ error: 'Failed to import from YouTube' });
+        }
     }
 });
 
@@ -235,3 +241,4 @@ export const staticPaths = {
 };
 
 export default router;
+

@@ -1,0 +1,218 @@
+/* client/src/renderer/styles/settings.css */
+
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    /* Kawaii pastel-pink background */
+    background: linear-gradient(135deg, #fff0f6 0%, #ffe6f2 60%, #fff7fb 100%);
+    color: #2b0633; /* deep mauve for contrast */
+    overflow-y: auto;
+}
+
+.settings-header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid rgba(203, 85, 129, 0.10);
+}
+
+.settings-header h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    /* soft pink gradient text */
+    background: linear-gradient(135deg, #ff6b9d 0%, #ffb7ce 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Make settings content fill available width so the settings view uses the full app width */
+.settings-content {
+    padding: 1.5rem 2rem;
+    max-width: none; /* remove centered max width */
+    width: 100%;
+    margin: 0; /* take full width */
+    box-sizing: border-box;
+}
+
+.settings-section {
+    background: rgba(255, 241, 246, 0.85); /* pale pink card */
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(255, 182, 193, 0.45);
+    box-shadow: 0 6px 18px rgba(255, 182, 193, 0.06);
+}
+
+.settings-section h2 {
+    margin: 0 0 1.25rem 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #6b2b4a; /* mauve heading */
+}
+
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    transition: all 0.22s ease;
+    border: 1px solid rgba(255, 182, 193, 0.15);
+}
+
+.setting-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(255, 182, 193, 0.06);
+}
+
+.setting-item:last-child {
+    margin-bottom: 0;
+}
+
+.setting-info {
+    flex: 1;
+}
+
+.setting-info h3 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #2b0633;
+}
+
+.setting-info p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #6b2b4a;
+    opacity: 0.85;
+}
+
+/* Toggle Switch Styles - pink theme */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(107, 43, 74, 0.08);
+    transition: 0.4s;
+    border-radius: 28px;
+    border: 1px solid rgba(255, 182, 193, 0.25);
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+    box-shadow: 0 2px 6px rgba(43, 6, 51, 0.12);
+}
+
+input:checked + .toggle-slider {
+    background: linear-gradient(135deg, #ff6b9d 0%, #ffb7ce 100%);
+    border-color: rgba(255, 107, 157, 0.8);
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+
+input:disabled + .toggle-slider {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Settings Button */
+.settings-button {
+    padding: 0.6rem 1.6rem;
+    background: linear-gradient(135deg, #ff6b9d 0%, #ffb7ce 100%);
+    color: #3b0426;
+    border: none;
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.settings-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(255, 107, 157, 0.18);
+}
+
+.settings-button:active {
+    transform: translateY(0);
+}
+
+/* Success Message */
+.success-message {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: linear-gradient(135deg, #ff6b9d 0%, #ffb7ce 100%);
+    color: white;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(255, 107, 157, 0.28);
+    animation: slideIn 0.3s ease;
+    z-index: 1000;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Ensure Settings fills the main-content when rendered inside the app layout */
+.main-content > .settings-container {
+    width: 100%;
+    padding: 0; /* let .settings-content control inner padding */
+    margin: 0;
+    box-sizing: border-box;
+    background: linear-gradient(135deg, #fff0f6 0%, #ffe6f2 60%, #fff7fb 100%); /* reinforce bg */
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .settings-content {
+        padding: 1rem;
+    }
+
+    .setting-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .toggle-switch,
+    .settings-button {
+        align-self: flex-end;
+    }
+}

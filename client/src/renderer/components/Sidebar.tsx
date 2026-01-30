@@ -7,6 +7,8 @@ import jsmediatags from 'jsmediatags';
 
 interface SidebarProps {
     onSongUpload: () => void;
+    currentView?: 'music' | 'settings';
+    onNavigate?: (view: 'music' | 'settings') => void;
 }
 
 interface Suggestions {
@@ -18,7 +20,7 @@ interface UserProfile {
     name: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onSongUpload, currentView = 'music', onNavigate }) => {
     const [isOpen, setIsOpen] = useState(false);
     const audioInputRef = useRef<HTMLInputElement>(null);
     const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -265,6 +267,24 @@ const Sidebar: React.FC<SidebarProps> = ({ onSongUpload }) => {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
+                    </button>
+                </div>
+
+                <div className="sidebar-navigation">
+                    <button
+                        className={`nav-button ${currentView === 'music' ? 'active' : ''}`}
+                        onClick={() => onNavigate?.('music')}
+                    >
+                        <span className="nav-icon">🎵</span>
+                        <span>Music</span>
+                    </button>
+
+                    <button
+                        className={`nav-button ${currentView === 'settings' ? 'active' : ''}`}
+                        onClick={() => onNavigate?.('settings')}
+                    >
+                        <span className="nav-icon">⚙️</span>
+                        <span>Settings</span>
                     </button>
                 </div>
 

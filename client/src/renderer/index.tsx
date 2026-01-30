@@ -51,7 +51,10 @@ const Root: React.FC = () => {
                     console.warn('main-ready not received within timeout');
                 }
 
-                const pinSet = await ipcRenderer.invoke('pin:has-pin');
+                // The IPC handler returns an object: { success: true, hasPinSet: boolean }
+                const pinResp = await ipcRenderer.invoke('pin:has-pin');
+                // Normalize to a boolean. Some older code expected a raw boolean; handle both.
+                const pinSet = typeof pinResp === 'boolean' ? pinResp : !!pinResp?.hasPinSet;
                 setHasPin(pinSet);
                 setIsUnlocked(!pinSet); // Auto-unlock if no PIN
             } catch (error) {

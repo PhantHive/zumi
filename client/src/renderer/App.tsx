@@ -5,6 +5,7 @@ import Player from './components/Player';
 import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
 import PinLock from './components/PinLock';
+import Settings from './components/Settings';
 import './styles/global.css';
 import { apiClient } from './utils/apiClient';
 import ZumiChan from './components/ZumiChan';
@@ -14,12 +15,15 @@ interface SongsResponse {
     data: Song[];
 }
 
+type View = 'music' | 'settings';
+
 const App: React.FC = () => {
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
     const [albums, setAlbums] = useState<Album[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [showZumiChan] = useState(true);
     const [isZumiChanOpen, setIsZumiChanOpen] = useState(false);
+    const [currentView, setCurrentView] = useState<View>('music');
 
     // PIN lock states
     const [hasPin, setHasPin] = useState<boolean>(false);
@@ -53,9 +57,7 @@ const App: React.FC = () => {
                     const response = await ipcRenderer.invoke('pin:has-pin');
                     console.log('PIN check response:', response);
 
-                    // FIX: Extract the actual boolean from the response object
-                    // The handler returns { success: true, hasPinSet: false }
-                    // We need to check response.hasPinSet, not just response
+                    // Extract the actual boolean from the response object
                     const hasPinSet = response?.hasPinSet || false;
                     setHasPin(hasPinSet);
                     setIsUnlocked(!hasPinSet); // If no PIN, unlock automatically
@@ -67,13 +69,13 @@ const App: React.FC = () => {
                         msg.includes('not implemented') ||
                         msg.includes('invoke')
                     ) {
-                        console.warn('IPC not available; keeping UI locked for safety');
+                        console.warn('IPC not available; unlocking anyway (dev mode)');
                         setHasPin(false);
-                        setIsUnlocked(true); // FIX: If no IPC, unlock anyway (dev mode)
+                        setIsUnlocked(true);
                     } else {
                         console.error('Error checking PIN:', error);
                         setHasPin(false);
-                        setIsUnlocked(true); // FIX: On error, unlock anyway
+                        setIsUnlocked(true);
                     }
                 } finally {
                     setIsCheckingPin(false);
@@ -87,10 +89,10 @@ const App: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (isUnlocked) {
+        if (isUnlocked && currentView === 'music') {
             fetchSongs();
         }
-    }, [isUnlocked]);
+    }, [isUnlocked, currentView]);
 
     const handleZumiWave = () => {
         setIsZumiChanOpen(!isZumiChanOpen);
@@ -144,6 +146,10 @@ const App: React.FC = () => {
         setIsUnlocked(true);
     };
 
+    const handleNavigate = (view: View) => {
+        setCurrentView(view);
+    };
+
     // Show loading while checking PIN
     if (isCheckingPin) {
         return (
@@ -158,10 +164,31 @@ const App: React.FC = () => {
         return <PinLock onUnlock={handleUnlock} />;
     }
 
+    // Show Settings view
+    if (currentView === 'settings') {
+        return (
+            <div className="app-container">
+                <Sidebar
+                    onSongUpload={fetchSongs}
+                    currentView={currentView}
+                    onNavigate={handleNavigate}
+                />
+                <div className="main-content">
+                    <Settings />
+                </div>
+            </div>
+        );
+    }
+
+    // Show Music view (default)
     return (
         <>
             <div className="app-container">
-                <Sidebar onSongUpload={fetchSongs} />
+                <Sidebar
+                    onSongUpload={fetchSongs}
+                    currentView={currentView}
+                    onNavigate={handleNavigate}
+                />
                 <div className="main-content">
                     {showZumiChan && (
                         <ZumiChan
@@ -224,3 +251,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

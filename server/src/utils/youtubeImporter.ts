@@ -28,7 +28,16 @@ export async function downloadFromYoutube(urls: string[], uploaderEmail?: string
     const scriptPath = path.resolve(process.cwd(), 'server', 'tools', 'download_youtube.py');
 
     return new Promise<any[]>((resolve, reject) => {
-        const py = spawn(process.env.PYTHON || 'python3', [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });
+        // Prefer explicit PYTHON env, fallback to platform-appropriate default
+        const pythonCmd = process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
+
+        // Spawn python script using resolved pythonCmd
+        const py = spawn(pythonCmd, [scriptPath], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+        // Handle failure to start python (ENOENT etc.)
+        py.on('error', (err) => {
+            reject(new Error('Failed to start python process: ' + String(err)));
+        });
 
         const payload = {
             urls,
@@ -52,50 +61,60 @@ export async function downloadFromYoutube(urls: string[], uploaderEmail?: string
                 console.warn('Python stderr:', stderr);
             }
 
+            // Defensive checks: ensure we got JSON back
+            const outTrim = stdout ? stdout.trim() : '';
+            if (!outTrim) {
+                reject(new Error('Python script returned no output. stderr: ' + stderr));
+                return;
+            }
+
+            let results: YtResult[];
             try {
-                const results: YtResult[] = JSON.parse(stdout);
-                const created: any[] = [];
+                results = JSON.parse(outTrim);
+            } catch (e) {
+                reject(new Error('Failed parsing python output: ' + String(e) + '\nstdout:' + stdout + '\nstderr:' + stderr));
+                return;
+            }
 
-                for (const r of results) {
-                    if (r.error) {
-                        created.push({ error: r.error, url: r.url });
-                        continue;
-                    }
+            const created: any[] = [];
 
-                    // Move audio file if necessary (already in output dir)
-                    const filepath = r.audio_file || '';
-                    const filename = path.basename(filepath);
-
-                    // Thumbnail
-                    let thumbnailFilename: string | undefined = undefined;
-                    if (r.thumbnail_file) {
-                        thumbnailFilename = path.basename(r.thumbnail_file);
-                    }
-
-                    const song: Partial<Song> = {
-                        title: r.title || filename.replace(/\.mp3$/, ''),
-                        artist: r.uploader || 'Unknown',
-                        duration: r.duration ? Math.floor(r.duration) : undefined,
-                        filepath: path.join(baseMusicPath, filename),
-                        thumbnailUrl: thumbnailFilename,
-                        videoUrl: r.video_url,
-                        uploadedBy: uploaderEmail || undefined,
-                        visibility: 'public',
-                    };
-
-                    try {
-                        const newSong = await db.createSong(song);
-                        created.push({ data: newSong });
-                    } catch (err) {
-                        console.error('Failed creating DB row for', r, err);
-                        created.push({ error: String(err), url: r.video_url });
-                    }
+            for (const r of results) {
+                if (r.error) {
+                    created.push({ error: r.error, url: r.url });
+                    continue;
                 }
 
-                resolve(created);
-            } catch (e) {
-                reject(new Error('Failed parsing python output: ' + e + '\nstdout:' + stdout + '\nstderr:' + stderr));
+                // Move audio file if necessary (already in output dir)
+                const filepath = r.audio_file || '';
+                const filename = path.basename(filepath);
+
+                // Thumbnail
+                let thumbnailFilename: string | undefined = undefined;
+                if (r.thumbnail_file) {
+                    thumbnailFilename = path.basename(r.thumbnail_file);
+                }
+
+                const song: Partial<Song> = {
+                    title: r.title || filename.replace(/\.mp3$/, ''),
+                    artist: r.uploader || 'Unknown',
+                    duration: r.duration ? Math.floor(r.duration) : undefined,
+                    filepath: path.join(baseMusicPath, filename),
+                    thumbnailUrl: thumbnailFilename,
+                    videoUrl: r.video_url,
+                    uploadedBy: uploaderEmail || undefined,
+                    visibility: 'public',
+                };
+
+                try {
+                    const newSong = await db.createSong(song);
+                    created.push({ data: newSong });
+                } catch (err) {
+                    console.error('Failed creating DB row for', r, err);
+                    created.push({ error: String(err), url: r.video_url });
+                }
             }
+
+            resolve(created);
         });
 
         // send JSON payload
