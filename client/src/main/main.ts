@@ -7,16 +7,13 @@ import { DiscordPresence } from './discordRPC.js';
 import { AuthHandler } from './auth.js';
 import { fileURLToPath } from 'url';
 import { ThumbnailToolbar } from './thumbnailToolbar.js';
-import { promises as fs } from 'fs';
-import { setupPinHandlers } from './pinHandler';
+import { promises as fs } from 'fs'
 
 const discordRPC = new DiscordPresence();
 const authHandler = new AuthHandler();
 
 // Ensure IPC handlers that the renderer may call early are registered now
 try {
-    // Setup PIN handlers immediately so renderer checks won't race
-    setupPinHandlers();
     // Provide runtime API port to renderer on demand (early)
     ipcMain.handle('get-runtime-api-port', () => {
         try {
@@ -285,6 +282,102 @@ app.whenReady().then(async () => {
         } catch (error: unknown) {
             if (error instanceof Error) {
                 console.error('Sign out error:', error.message);
+                return { success: false, error: error.message };
+            }
+            return { success: false, error: 'Unknown error' };
+        }
+    });
+
+    // PIN handlers
+    ipcMain.handle('pin:has-pin', async () => {
+        console.log('pin:has-pin handler invoked');
+        try {
+            // Check if authHandler's store has a pinHash
+            const store = (authHandler as any).store;
+            if (!store) {
+                return { success: false, hasPinSet: false };
+            }
+
+            const pinHash = store.get('pinHash');
+            return {
+                success: true,
+                hasPinSet: !!pinHash
+            };
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Check PIN error:', error.message);
+                return { success: false, error: error.message, hasPinSet: false };
+            }
+            return { success: false, error: 'Unknown error', hasPinSet: false };
+        }
+    });
+
+    ipcMain.handle('pin:set', async (_event, pinHash: string) => {
+        console.log('pin:set handler invoked');
+        try {
+            const store = (authHandler as any).store;
+            if (!store) {
+                throw new Error('Store not initialized');
+            }
+
+            store.set('pinHash', pinHash);
+            console.log('PIN hash set successfully');
+            return { success: true };
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Set PIN error:', error.message);
+                return { success: false, error: error.message };
+            }
+            return { success: false, error: 'Unknown error' };
+        }
+    });
+
+    ipcMain.handle('pin:verify', async (_event, pinHash: string) => {
+        console.log('pin:verify handler invoked');
+        try {
+            const store = (authHandler as any).store;
+            if (!store) {
+                throw new Error('Store not initialized');
+            }
+
+            const storedHash = store.get('pinHash');
+            if (!storedHash) {
+                return {
+                    success: true,
+                    valid: false,
+                    error: 'No PIN set'
+                };
+            }
+
+            const isValid = storedHash === pinHash;
+            console.log('PIN verification result:', isValid);
+            return {
+                success: true,
+                valid: isValid
+            };
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Verify PIN error:', error.message);
+                return { success: false, error: error.message, valid: false };
+            }
+            return { success: false, error: 'Unknown error', valid: false };
+        }
+    });
+
+    ipcMain.handle('pin:delete', async () => {
+        console.log('pin:delete handler invoked');
+        try {
+            const store = (authHandler as any).store;
+            if (!store) {
+                throw new Error('Store not initialized');
+            }
+
+            store.delete('pinHash');
+            console.log('PIN hash deleted successfully');
+            return { success: true };
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Delete PIN error:', error.message);
                 return { success: false, error: error.message };
             }
             return { success: false, error: 'Unknown error' };
