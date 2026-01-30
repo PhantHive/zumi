@@ -39,6 +39,7 @@ interface SongRow {
     lyrics: string | null;
     playCount: number;
     tags: string | null;
+    videoUrl: string | null; // NEW: Video URL field
 }
 
 interface AlbumRow {
@@ -59,6 +60,7 @@ const convertSongRow = (row: SongRow): Song => ({
     filepath: row.filepath,
     albumId: row.albumId,
     thumbnailUrl: row.thumbnailUrl || undefined,
+    videoUrl: row.videoUrl || undefined, // NEW: Include video URL
     uploadedBy: row.uploadedBy || undefined,
     visibility: row.visibility,
     year: row.year || undefined,
@@ -81,27 +83,28 @@ export class DbClient {
     private initDb(): void {
         this.db.serialize(() => {
             this.db.run(`
-        CREATE TABLE IF NOT EXISTS songs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          title TEXT NOT NULL,
-          artist TEXT NOT NULL,
-          duration INTEGER,
-          filepath TEXT NOT NULL,
-          albumId TEXT DEFAULT 'kpop',
-          thumbnailUrl TEXT,
-          cover_art TEXT,
-          genre TEXT DEFAULT 'K-Pop',
-          uploadedBy TEXT,
-          visibility TEXT CHECK(visibility IN ('public', 'private')) NOT NULL DEFAULT 'public',
-          year INTEGER,
-          bpm INTEGER,
-          mood TEXT,
-          language TEXT,
-          lyrics TEXT,
-          playCount INTEGER DEFAULT 0,
-          tags TEXT
-        )
-      `);
+                CREATE TABLE IF NOT EXISTS songs (
+                                                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                                     title TEXT NOT NULL,
+                                                     artist TEXT NOT NULL,
+                                                     duration INTEGER,
+                                                     filepath TEXT NOT NULL,
+                                                     albumId TEXT DEFAULT 'kpop',
+                                                     thumbnailUrl TEXT,
+                                                     cover_art TEXT,
+                                                     genre TEXT DEFAULT 'K-Pop',
+                                                     uploadedBy TEXT,
+                                                     visibility TEXT CHECK(visibility IN ('public', 'private')) NOT NULL DEFAULT 'public',
+                    year INTEGER,
+                    bpm INTEGER,
+                    mood TEXT,
+                    language TEXT,
+                    lyrics TEXT,
+                    playCount INTEGER DEFAULT 0,
+                    tags TEXT,
+                    videoUrl TEXT
+                    )
+            `);
 
             // Auto-migration: Add new columns if they don't exist
             this.runMigrations();
@@ -156,6 +159,10 @@ export class DbClient {
                     {
                         name: 'tags',
                         sql: 'ALTER TABLE songs ADD COLUMN tags TEXT',
+                    },
+                    {
+                        name: 'videoUrl',
+                        sql: 'ALTER TABLE songs ADD COLUMN videoUrl TEXT', // NEW: Video URL migration
                     },
                 ];
 
@@ -244,12 +251,12 @@ export class DbClient {
 
     async createSong(song: Partial<Song> & { genre?: string }): Promise<Song> {
         const sql = `
-      INSERT INTO songs (
-        title, artist, duration, filepath, albumId, thumbnailUrl, genre,
-        uploadedBy, visibility, year, bpm, mood, language, lyrics, tags
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+            INSERT INTO songs (
+                title, artist, duration, filepath, albumId, thumbnailUrl, genre,
+                uploadedBy, visibility, year, bpm, mood, language, lyrics, tags, videoUrl
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
 
         return new Promise((resolve, reject) => {
             const self = this;
@@ -271,6 +278,7 @@ export class DbClient {
                     song.language || null,
                     song.lyrics || null,
                     song.tags ? song.tags.join(', ') : null,
+                    song.videoUrl || null, // NEW: Video URL parameter
                 ],
                 function (this: any, err: Error | null) {
                     if (err) {
@@ -470,6 +478,7 @@ export class DbClient {
             'language',
             'lyrics',
             'tags',
+            'videoUrl', // NEW: Allow video URL updates
         ];
 
         const fields: string[] = [];

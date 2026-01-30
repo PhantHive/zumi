@@ -6,12 +6,46 @@ import { Song } from '../../../shared/types/common.js';
 import * as fs from 'node:fs';
 import { AuthenticatedRequest } from './authController.js';
 import User from '../models/User.js';
+import ffmpeg from 'fluent-ffmpeg';
 
 type MulterRequest = Request & {
     files?: {
         [fieldname: string]: Express.Multer.File[];
     };
 };
+
+// Helper: run ffprobe and return metadata.tags (or empty object)
+async function probeTags(filePath: string): Promise<Record<string, any>> {
+    return new Promise((resolve) => {
+        try {
+            // fluent-ffmpeg's ffprobe callback
+            (ffmpeg as any).ffprobe(filePath, (err: any, metadata: any) => {
+                if (err) {
+                    console.warn('ffprobe failed to read tags:', err && err.message ? err.message : err);
+                    resolve({});
+                    return;
+                }
+                const tags = (metadata && (metadata.format && metadata.format.tags)) || {};
+                resolve(tags);
+            });
+        } catch (e) {
+            console.warn('ffprobe exception:', e);
+            resolve({});
+        }
+    });
+}
+
+// Normalize common tag keys across formats
+function extractTagValue(tags: Record<string, any>, keys: string[]): string | undefined {
+    for (const key of keys) {
+        if (!tags) continue;
+        const val = tags[key];
+        if (typeof val === 'string' && val.trim().length) return val.trim();
+        // some tag values may be arrays
+        if (Array.isArray(val) && val.length && typeof val[0] === 'string') return val[0].trim();
+    }
+    return undefined;
+}
 
 export class SongController {
     getAllSongs: RequestHandler = async (req, res) => {
@@ -131,24 +165,40 @@ export class SongController {
             const baseThumbnailPath = isDev
                 ? './public/uploads/thumbnails'
                 : '/app/uploads/thumbnails';
+            const baseVideoPath = isDev
+                ? './public/uploads/videos'
+                : '/app/uploads/videos'; // NEW: Video base path
 
             // Ensure directories exist
             await fs.promises.mkdir(baseMusicPath, { recursive: true });
             await fs.promises.mkdir(baseThumbnailPath, { recursive: true });
+            await fs.promises.mkdir(baseVideoPath, { recursive: true }); // NEW: Create video directory
 
             const duration = await getAudioDurationInSeconds(audioFile.path);
             console.log('Audio duration:', duration);
 
+            // Try to read metadata tags from the audio file and use them to fill missing fields
+            const metadataTags = await probeTags(audioFile.path);
+            const tagTitle = extractTagValue(metadataTags, ['title', 'TITLE', 'TIT2', '\u00A9nam', 'name']);
+            const tagArtist = extractTagValue(metadataTags, ['artist', 'ARTIST', 'TPE1', '\u00A9ART', 'album_artist']);
+            const tagAlbum = extractTagValue(metadataTags, ['album', 'ALBUM', 'TALB', '\u00A9alb']);
+            const tagYear = extractTagValue(metadataTags, ['date', 'YEAR', 'TYER', 'year']);
+            const tagGenre = extractTagValue(metadataTags, ['genre', 'GENRE', 'TCON']);
+            const tagBpm = extractTagValue(metadataTags, ['TBPM', 'bpm', 'BPM']);
+            const tagLyrics = extractTagValue(metadataTags, ['lyrics', 'LYRICS', 'unsynchronised_lyric', 'comment']);
+
             let thumbnailUrl: string | undefined = undefined;
             if (multerReq.files?.['thumbnail']?.[0]) {
                 const thumbnail = multerReq.files['thumbnail'][0];
-                // Use the existing path for the thumbnail
-                const publicThumbnailPath = path.join(
-                    baseThumbnailPath,
-                    thumbnail.filename,
-                );
-                console.log('Public thumbnail path:', publicThumbnailPath); // Debug log
                 thumbnailUrl = `${thumbnail.filename}`;
+            }
+
+            // NEW: Handle video upload
+            let videoUrl: string | undefined = undefined;
+            if (multerReq.files?.['video']?.[0]) {
+                const video = multerReq.files['video'][0];
+                videoUrl = `${video.filename}`;
+                console.log('Video uploaded:', videoUrl);
             }
 
             // Parse tags if provided as comma-separated string
@@ -158,25 +208,26 @@ export class SongController {
 
             const song: Partial<Song> = {
                 title:
-                    req.body.title || path.parse(audioFile.originalname).name,
-                artist: req.body.artist || 'Unknown Artist',
+                    req.body.title || tagTitle || path.parse(audioFile.originalname).name,
+                artist: req.body.artist || tagArtist || 'Unknown Artist',
                 duration: Math.floor(duration),
-                albumId: req.body.album || 'Unknown Album',
+                albumId: req.body.album || tagAlbum || 'Unknown Album',
                 filepath: path.join(baseMusicPath, audioFile.filename),
                 thumbnailUrl: thumbnailUrl || 'placeholder.jpg',
+                videoUrl, // NEW: Include video URL
                 uploadedBy: userEmail,
                 visibility: req.body.visibility || 'public',
-                year: req.body.year ? parseInt(req.body.year) : undefined,
-                bpm: req.body.bpm ? parseInt(req.body.bpm) : undefined,
+                year: req.body.year ? parseInt(req.body.year) : tagYear ? parseInt(tagYear) : undefined,
+                bpm: req.body.bpm ? parseInt(req.body.bpm) : tagBpm ? parseInt(tagBpm) : undefined,
                 mood: req.body.mood,
                 language: req.body.language,
-                lyrics: req.body.lyrics,
+                lyrics: req.body.lyrics || tagLyrics,
                 tags,
             };
 
             const newSong = await db.createSong({
                 ...song,
-                genre: req.body.genre ? String(req.body.genre) : undefined,
+                genre: req.body.genre ? String(req.body.genre) : tagGenre ? String(tagGenre) : undefined,
             });
             res.status(201).json({ data: newSong });
         } catch (error) {
@@ -216,6 +267,55 @@ export class SongController {
                 console.error('Error streaming song:', error);
             }
             res.status(500).json({ error: 'Failed to stream song' });
+        }
+    };
+
+    // NEW: Stream video endpoint
+    streamVideo: RequestHandler = async (req, res) => {
+        try {
+            const authenticatedReq = req as AuthenticatedRequest;
+            const userEmail = authenticatedReq.user?.email;
+            const song = await db.getSongById(parseInt(req.params.id));
+
+            if (!song) {
+                res.status(404).json({ error: 'Song not found' });
+                return;
+            }
+
+            // Check visibility permissions
+            if (
+                song.visibility === 'private' &&
+                song.uploadedBy !== userEmail
+            ) {
+                res.status(403).json({
+                    error: 'Access denied to private song',
+                });
+                return;
+            }
+
+            if (!song.videoUrl) {
+                res.status(404).json({ error: 'No video available for this song' });
+                return;
+            }
+
+            // Construct full video path
+            const isDev = process.env.NODE_ENV === 'development';
+            const baseVideoPath = isDev
+                ? './public/uploads/videos'
+                : '/app/uploads/videos';
+            const videoPath = path.join(baseVideoPath, song.videoUrl);
+
+            if (!fs.existsSync(videoPath)) {
+                res.status(404).json({ error: 'Video file not found' });
+                return;
+            }
+
+            res.sendFile(path.resolve(videoPath));
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Error streaming video:', error);
+            }
+            res.status(500).json({ error: 'Failed to stream video' });
         }
     };
 
@@ -276,6 +376,9 @@ export class SongController {
 
             const isDev = process.env.NODE_ENV === 'development';
             const baseMusicPath = isDev ? './public/data' : '/app/data';
+            const baseVideoPath = isDev
+                ? './public/uploads/videos'
+                : '/app/uploads/videos'; // NEW: Video base path for updates
 
             const updates: any = {};
 
@@ -290,12 +393,37 @@ export class SongController {
                 } catch (e) {
                     console.warn('Failed to determine audio duration:', e);
                 }
+
+                // If audio is replaced, try to read metadata and fill missing fields
+                const metadataTags = await probeTags(audioFile.path);
+                const tagTitle = extractTagValue(metadataTags, ['title', 'TITLE', 'TIT2', '\u00A9nam', 'name']);
+                const tagArtist = extractTagValue(metadataTags, ['artist', 'ARTIST', 'TPE1', '\u00A9ART', 'album_artist']);
+                const tagAlbum = extractTagValue(metadataTags, ['album', 'ALBUM', 'TALB', '\u00A9alb']);
+                const tagYear = extractTagValue(metadataTags, ['date', 'YEAR', 'TYER', 'year']);
+                const tagGenre = extractTagValue(metadataTags, ['genre', 'GENRE', 'TCON']);
+                const tagBpm = extractTagValue(metadataTags, ['TBPM', 'bpm', 'BPM']);
+                const tagLyrics = extractTagValue(metadataTags, ['lyrics', 'LYRICS', 'unsynchronised_lyric', 'comment']);
+
+                if (!req.body.title && tagTitle) updates.title = tagTitle;
+                if (!req.body.artist && tagArtist) updates.artist = tagArtist;
+                if (!req.body.album && tagAlbum) updates.albumId = tagAlbum;
+                if (!req.body.year && tagYear) updates.year = parseInt(tagYear);
+                if (!req.body.bpm && tagBpm) updates.bpm = parseInt(tagBpm);
+                if (!req.body.lyrics && tagLyrics) updates.lyrics = tagLyrics;
+                if (!req.body.genre && tagGenre) updates.genre = tagGenre;
             }
 
             // Handle optional thumbnail replacement
             const thumbnail = multerReq.files?.['thumbnail']?.[0];
             if (thumbnail) {
                 updates.thumbnailUrl = `${thumbnail.filename}`;
+            }
+
+            // NEW: Handle optional video replacement
+            const video = multerReq.files?.['video']?.[0];
+            if (video) {
+                updates.videoUrl = `${video.filename}`;
+                console.log('Video updated:', updates.videoUrl);
             }
 
             // Metadata fields
@@ -309,7 +437,6 @@ export class SongController {
             if (req.body.language) updates.language = req.body.language;
             if (req.body.lyrics) updates.lyrics = req.body.lyrics;
             if (req.body.genre) updates.genre = req.body.genre;
-            // baseThumbnailPath not needed here; thumbnails are handled via multer filename
 
             const updated = await db.updateSong(songId, updates, userEmail);
             if (!updated) {

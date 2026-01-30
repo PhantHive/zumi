@@ -40,6 +40,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../../public')));
 app.use('/uploads', express.static(path.join(staticPaths.uploads)));
 app.use('/data', express.static(staticPaths.data));
+app.use('/videos', express.static(staticPaths.videos)); // NEW: Serve video files
 
 // Serve mobile releases (APK files)
 app.use('/mobile', express.static('/opt/zumi-mobile/releases'));

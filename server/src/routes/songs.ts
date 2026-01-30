@@ -1,4 +1,3 @@
-// server/src/routes/songs.ts
 import { Router, Request, Response, NextFunction } from 'express';
 import { songController } from '../controllers/songController.js';
 import auth from '../middlewares/auth.js';
@@ -19,10 +18,12 @@ const UPLOAD_PATHS = {
     development: {
         thumbnails: path.join(PROJECT_ROOT, 'public', 'uploads', 'thumbnails'),
         audio: path.join(PROJECT_ROOT, 'public', 'data'),
+        videos: path.join(PROJECT_ROOT, 'public', 'uploads', 'videos'), // NEW: Video storage path
     },
     production: {
         thumbnails: '/app/uploads/thumbnails',
         audio: '/app/data',
+        videos: '/app/uploads/videos', // NEW: Video storage path
     },
 };
 
@@ -31,8 +32,17 @@ const storage = multer.diskStorage({
         const paths = isDev
             ? UPLOAD_PATHS.development
             : UPLOAD_PATHS.production;
-        const dest =
-            file.fieldname === 'thumbnail' ? paths.thumbnails : paths.audio;
+
+        // NEW: Determine destination based on file field
+        let dest: string;
+        if (file.fieldname === 'thumbnail') {
+            dest = paths.thumbnails;
+        } else if (file.fieldname === 'video') {
+            dest = paths.videos;
+        } else {
+            dest = paths.audio;
+        }
+
         fs.mkdirSync(dest, { recursive: true });
         cb(null, dest);
     },
@@ -74,6 +84,7 @@ router.get('/liked', songController.getLikedSongs);
 
 router.get('/:id', songController.getSong);
 router.get('/:id/stream', songController.streamSong);
+router.get('/:id/stream-video', songController.streamVideo); // NEW: Video streaming endpoint
 router.post('/:id/like', songController.toggleLike);
 router.patch('/:id/visibility', songController.updateVisibility);
 router.delete('/:id', songController.deleteSong);
@@ -88,6 +99,7 @@ router.post(
     upload.fields([
         { name: 'audio', maxCount: 1 },
         { name: 'thumbnail', maxCount: 1 },
+        { name: 'video', maxCount: 1 }, // NEW: Video upload field
     ]),
     songController.createSong,
 );
@@ -98,6 +110,7 @@ router.patch(
     upload.fields([
         { name: 'audio', maxCount: 1 },
         { name: 'thumbnail', maxCount: 1 },
+        { name: 'video', maxCount: 1 }, // NEW: Video upload field for updates
     ]),
     songController.updateSong,
 );
@@ -120,6 +133,48 @@ router.get('/thumbnails/:filename', (req, res) => {
             }
         }
     });
+});
+
+// NEW: Video serving endpoint
+router.get('/videos/:filename', (req, res) => {
+    const { filename } = req.params;
+    const paths = isDev ? UPLOAD_PATHS.development : UPLOAD_PATHS.production;
+    const filePath = path.join(paths.videos, filename);
+
+    if (!fs.existsSync(filePath)) {
+        res.status(404).send('Video not found');
+        return;
+    }
+
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    const range = req.headers.range;
+
+    if (range) {
+        // Handle range requests for video streaming
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunksize = (end - start) + 1;
+        const file = fs.createReadStream(filePath, { start, end });
+        const head = {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize,
+            'Content-Type': 'video/mp4', // Adjust based on actual video format
+        };
+
+        res.writeHead(206, head);
+        file.pipe(res);
+    } else {
+        // Send entire file
+        const head = {
+            'Content-Length': fileSize,
+            'Content-Type': 'video/mp4', // Adjust based on actual video format
+        };
+        res.writeHead(200, head);
+        fs.createReadStream(filePath).pipe(res);
+    }
 });
 
 router.get('/thumbnails/:filename/colors', async (req, res) => {
@@ -151,6 +206,9 @@ export const staticPaths = {
         ? path.join(PROJECT_ROOT, 'public', 'uploads')
         : '/app/uploads',
     data: isDev ? path.join(PROJECT_ROOT, 'public', 'data') : '/app/data',
+    videos: isDev
+        ? path.join(PROJECT_ROOT, 'public', 'uploads', 'videos')
+        : '/app/uploads/videos', // NEW: Export video path
 };
 
 export default router;

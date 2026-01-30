@@ -68,6 +68,7 @@ jobs:
             
             # Create directories including config
             mkdir -p /opt/music-server/uploads/thumbnails
+            mkdir -p /opt/music-server/uploads/videos
             mkdir -p /opt/music-server/data
             mkdir -p /opt/music-server/database
             mkdir -p /opt/music-server/config  # ADD THIS LINE
