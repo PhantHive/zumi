@@ -98,6 +98,19 @@
         height: 24px;
     }
 
+    .loading-icon {
+        position: absolute;
+        color: rgba(255, 182, 193, 0.9);
+        width: 28px;
+        height: 28px;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
     .play-icon {
         transform: scale(1) translateX(1px);
         opacity: 1;
@@ -117,6 +130,16 @@
         .pause-icon {
             transform: scale(1);
             opacity: 1;
+        }
+    }
+
+    &--loading {
+        cursor: wait;
+        pointer-events: none;
+        border-color: rgba(255, 182, 193, 0.4);
+
+        &::before {
+            opacity: 0.6;
         }
     }
 

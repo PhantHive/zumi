@@ -44,6 +44,7 @@ const Player: React.FC<PlayerProps> = ({
     const [streamUrl, setStreamUrl] = useState<string>('');
     const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
     const [hasVideo, setHasVideo] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
     const audioRef = useRef<HTMLAudioElement>(null);
     const videoRefExternal = useRef<HTMLVideoElement | null>(null);
 
@@ -196,6 +197,7 @@ const Player: React.FC<PlayerProps> = ({
 
         const loadMedia = async () => {
             if (currentSong) {
+                setIsLoading(true);
                 try {
                     // Load audio stream
                     const streamData = await apiClient.getStream(
@@ -232,14 +234,38 @@ const Player: React.FC<PlayerProps> = ({
                         }
                         setHasVideo(false);
                     }
+
+                    // Auto-play audio immediately after loading (if no video)
+                    if (!currentSong.videoUrl && audioRef.current) {
+                        audioRef.current.src = streamData.url;
+                        await new Promise((resolve) => setTimeout(resolve, 100));
+
+                        try {
+                            await audioRef.current.play();
+                            setIsPlaying(true);
+                            setIsLoading(false);
+                            console.log('Audio auto-play started');
+                        } catch (playError) {
+                            console.error('Audio auto-play failed:', playError);
+                            setIsPlaying(false);
+                            setIsLoading(false);
+                        }
+                    } else {
+                        // For video, loading will complete when video starts playing
+                        setIsLoading(false);
+                    }
                 } catch (error) {
                     console.error('Error loading media:', error);
+                    setIsPlaying(false);
+                    setIsLoading(false);
                 }
             } else {
                 if (onVideoUrlChange) {
                     onVideoUrlChange('');
                 }
                 setHasVideo(false);
+                setIsPlaying(false);
+                setIsLoading(false);
             }
         };
 
@@ -272,57 +298,32 @@ const Player: React.FC<PlayerProps> = ({
         }
     }, [currentSong, isPlaying]);
 
+    // Handle video auto-play separately since video loads asynchronously
     useEffect(() => {
-        const playNewSong = async () => {
-            if (currentSong) {
-                try {
-                    // If we have video, the VideoPlayer component handles playback with autoPlay
-                    if (hasVideo && videoRefExternal.current) {
-                        console.log('Video playback - handled by VideoPlayer component');
-                        // Wait a bit for the video to start playing
-                        await new Promise((resolve) => setTimeout(resolve, 300));
-                        // Check if video is playing
-                        if (!videoRefExternal.current.paused) {
-                            setIsPlaying(true);
-                        } else {
-                            // Try to play if not already playing
-                            try {
-                                await videoRefExternal.current.play();
-                                setIsPlaying(true);
-                            } catch (playError) {
-                                console.error('Could not start video playback:', playError);
-                            }
-                        }
+        const handleVideoAutoPlay = async () => {
+            if (hasVideo && videoRefExternal.current && currentSong) {
+                console.log('Video ready - attempting auto-play');
+                // Wait for video element to be ready
+                await new Promise((resolve) => setTimeout(resolve, 500));
+
+                if (videoRefExternal.current && !videoRefExternal.current.paused) {
+                    console.log('Video already playing');
+                    setIsPlaying(true);
+                } else if (videoRefExternal.current) {
+                    try {
+                        await videoRefExternal.current.play();
+                        setIsPlaying(true);
+                        console.log('Video auto-play started');
+                    } catch (playError) {
+                        console.error('Video auto-play failed:', playError);
+                        setIsPlaying(false);
                     }
-                    // Otherwise play audio
-                    else if (audioRef.current && !hasVideo) {
-                        await audioRef.current.pause();
-                        audioRef.current.currentTime = 0;
-
-                        const streamData = await apiClient.getStream(
-                            `/api/songs/${currentSong.id}/stream`,
-                        );
-                        setStreamUrl(streamData.url);
-
-                        audioRef.current.src = streamData.url;
-
-                        await new Promise((resolve) => setTimeout(resolve, 100));
-
-                        const playPromise = audioRef.current.play();
-                        if (playPromise !== undefined) {
-                            await playPromise;
-                            setIsPlaying(true);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error starting playback:', error);
-                    setIsPlaying(false);
                 }
             }
         };
 
-        playNewSong();
-    }, [currentSong, hasVideo]);
+        handleVideoAutoPlay();
+    }, [hasVideo, currentSong]);
 
     useEffect(() => {
         if (thumbnailUrl) {
@@ -432,6 +433,7 @@ const Player: React.FC<PlayerProps> = ({
                 <div className="player-controls">
                     <KawaiiPlayButton
                         isPlaying={isPlaying}
+                        isLoading={isLoading}
                         onClick={handlePlayClick}
                         onNext={onNext}
                         onPrevious={onPrevious}

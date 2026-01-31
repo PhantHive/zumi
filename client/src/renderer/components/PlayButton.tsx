@@ -1,9 +1,10 @@
 import React from 'react';
-import { Play, Pause, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Loader2 } from 'lucide-react';
 import '../styles/kawaiiPlayButton.scss';
 
 interface KawaiiPlayButtonProps {
     isPlaying: boolean;
+    isLoading?: boolean;
     onClick: () => void;
     onNext: () => void;
     onPrevious: () => void;
@@ -11,6 +12,7 @@ interface KawaiiPlayButtonProps {
 
 const KawaiiPlayButton: React.FC<KawaiiPlayButtonProps> = ({
     isPlaying,
+    isLoading = false,
     onClick,
     onNext,
     onPrevious,
@@ -27,11 +29,17 @@ const KawaiiPlayButton: React.FC<KawaiiPlayButtonProps> = ({
             </button>
 
             <div
-                className={`kawaii-play-button ${isPlaying ? 'kawaii-play-button--playing' : ''}`}
+                className={`kawaii-play-button ${isPlaying ? 'kawaii-play-button--playing' : ''} ${isLoading ? 'kawaii-play-button--loading' : ''}`}
                 onClick={onClick}
             >
-                <Play className="play-icon" />
-                <Pause className="pause-icon" />
+                {isLoading ? (
+                    <Loader2 className="loading-icon" />
+                ) : (
+                    <>
+                        <Play className="play-icon" />
+                        <Pause className="pause-icon" />
+                    </>
+                )}
                 <div className="ambient-glow" />
             </div>
 
