@@ -10,7 +10,10 @@ interface PlayerProps {
     currentSong: Song | null;
     onNext: () => void;
     onPrevious: () => void;
-    onRandomSong: () => void; // Add this
+    onRandomSong: () => void;
+    onPlayStateChange?: (isPlaying: boolean) => void;
+    onVideoUrlChange?: (url: string) => void;
+    onVideoRefReady?: (ref: React.RefObject<HTMLVideoElement | null>) => void;
 }
 
 interface Color {
@@ -26,17 +29,23 @@ interface Colors {
 }
 
 const Player: React.FC<PlayerProps> = ({
-    currentSong,
-    onNext,
-    onPrevious,
-    onRandomSong,
-}) => {
+                                           currentSong,
+                                           onNext,
+                                           onPrevious,
+                                           onRandomSong,
+                                           onPlayStateChange,
+                                           onVideoUrlChange,
+                                           onVideoRefReady,
+                                       }) => {
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
     const [streamUrl, setStreamUrl] = useState<string>('');
     const [thumbnailUrl, setThumbnailUrl] = useState<string>('');
+    const [hasVideo, setHasVideo] = useState(false);
     const audioRef = useRef<HTMLAudioElement>(null);
+    const videoRefExternal = useRef<HTMLVideoElement | null>(null);
 
     const extractColors = async (url: string): Promise<Colors> => {
         const img = new Image();
@@ -68,11 +77,10 @@ const Player: React.FC<PlayerProps> = ({
                         b: number;
                         a: number;
                     }) => {
-                        if (color.a === 0) return false; // Skip fully transparent pixels
+                        if (color.a === 0) return false;
                         const brightness =
-                            (color.r * 299 + color.g * 587 + color.b * 114) /
-                            1000;
-                        return brightness > 100; // Adjust threshold as needed
+                            (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+                        return brightness > 100;
                     };
 
                     const colors = [
@@ -98,7 +106,7 @@ const Player: React.FC<PlayerProps> = ({
                         b: number;
                         a: number;
                     }) => {
-                        const factor = 1.5; // Increase brightness by 50%
+                        const factor = 1.5;
                         return `rgba(${Math.min(color.r * factor, 255)}, ${Math.min(color.g * factor, 255)}, ${Math.min(color.b * factor, 255)}, 0.8)`;
                     };
 
@@ -109,7 +117,7 @@ const Player: React.FC<PlayerProps> = ({
                         });
                     } else {
                         resolve({
-                            color1: 'rgba(255, 255, 255, 0.8)', // Default to white if no valid colors found
+                            color1: 'rgba(255, 255, 255, 0.8)',
                             color2: 'rgba(255, 255, 255, 0.8)',
                         });
                     }
@@ -118,25 +126,34 @@ const Player: React.FC<PlayerProps> = ({
         });
     };
 
-    // Update this existing useEffect to ensure it runs for all play state changes
+    // Notify parent of play state changes
     useEffect(() => {
-        // Notify main process of play state changes
+        if (onPlayStateChange) {
+            onPlayStateChange(isPlaying);
+        }
         ipcRenderer.send('thumbnail-update-state', isPlaying);
-    }, [isPlaying]);
+    }, [isPlaying, onPlayStateChange]);
 
-    // Modify handlePlayClick to ensure it updates the state first
+    // Handle play/pause for both audio and video
     const handlePlayClick = async () => {
-        if (!audioRef.current) return;
-
         try {
-            if (isPlaying) {
-                audioRef.current.pause();
-                setIsPlaying(false); // This will trigger the useEffect above
-            } else {
-                const playPromise = audioRef.current.play();
-                if (playPromise !== undefined) {
-                    setIsPlaying(true); // Update state before waiting for the promise
-                    await playPromise;
+            if (hasVideo && videoRefExternal.current) {
+                // Use video for playback
+                if (isPlaying) {
+                    videoRefExternal.current.pause();
+                    setIsPlaying(false);
+                } else {
+                    await videoRefExternal.current.play();
+                    setIsPlaying(true);
+                }
+            } else if (audioRef.current) {
+                // Use audio for playback
+                if (isPlaying) {
+                    audioRef.current.pause();
+                    setIsPlaying(false);
+                } else {
+                    await audioRef.current.play();
+                    setIsPlaying(true);
                 }
             }
         } catch (error) {
@@ -146,35 +163,24 @@ const Player: React.FC<PlayerProps> = ({
     };
 
     useEffect(() => {
-        // Thumbnail toolbar handlers
         const handleThumbnailPrevious = () => onPrevious();
         const handleThumbnailNext = () => onNext();
         const handleThumbnailPlayPause = () => handlePlayClick();
-        const handleThumbnailRandom = () => onRandomSong(); // Add this handler
+        const handleThumbnailRandom = () => onRandomSong();
 
         ipcRenderer.on('thumbnail-previous', handleThumbnailPrevious);
         ipcRenderer.on('thumbnail-next', handleThumbnailNext);
         ipcRenderer.on('thumbnail-playpause', handleThumbnailPlayPause);
-        ipcRenderer.on('thumbnail-random', handleThumbnailRandom); // Add this listener
+        ipcRenderer.on('thumbnail-random', handleThumbnailRandom);
 
         return () => {
-            ipcRenderer.removeListener(
-                'thumbnail-previous',
-                handleThumbnailPrevious,
-            );
+            ipcRenderer.removeListener('thumbnail-previous', handleThumbnailPrevious);
             ipcRenderer.removeListener('thumbnail-next', handleThumbnailNext);
-            ipcRenderer.removeListener(
-                'thumbnail-playpause',
-                handleThumbnailPlayPause,
-            );
-            ipcRenderer.removeListener(
-                'thumbnail-random',
-                handleThumbnailRandom,
-            ); // Add this cleanup
+            ipcRenderer.removeListener('thumbnail-playpause', handleThumbnailPlayPause);
+            ipcRenderer.removeListener('thumbnail-random', handleThumbnailRandom);
         };
     }, [onPrevious, onNext, handlePlayClick, onRandomSong]);
 
-    // In Player.tsx useEffect
     useEffect(() => {
         if (currentSong) {
             ipcRenderer.send('update-thumbnail-info', {
@@ -184,41 +190,69 @@ const Player: React.FC<PlayerProps> = ({
         }
     }, [currentSong]);
 
+    // Load audio, thumbnail, and video when song changes
     useEffect(() => {
-        let cleanup: (() => void) | undefined;
+        let cleanupFunctions: (() => void)[] = [];
 
         const loadMedia = async () => {
             if (currentSong) {
                 try {
+                    // Load audio stream
                     const streamData = await apiClient.getStream(
                         `/api/songs/${currentSong.id}/stream`,
                     );
                     setStreamUrl(streamData.url);
-                    cleanup = streamData.cleanup;
+                    cleanupFunctions.push(streamData.cleanup);
 
+                    // Load thumbnail
                     if (currentSong.thumbnailUrl) {
                         const thumbnailData = await apiClient.getStream(
                             `/api/songs/thumbnails/${currentSong.thumbnailUrl}`,
                         );
                         setThumbnailUrl(thumbnailData.url);
-                        const prevCleanup = cleanup;
-                        cleanup = () => {
-                            prevCleanup?.();
-                            thumbnailData.cleanup();
-                        };
+                        cleanupFunctions.push(thumbnailData.cleanup);
+                    }
+
+                    // Load video if available
+                    if (currentSong.id && onVideoUrlChange) {
+                        try {
+                            const videoData = await apiClient.getStream(
+                                `/api/songs/${currentSong.id}/stream-video`,
+                            );
+                            onVideoUrlChange(videoData.url);
+                            setHasVideo(true);
+                            cleanupFunctions.push(videoData.cleanup);
+                            console.log('Video loaded successfully');
+                        } catch (videoError) {
+                            console.log('No video available for this song');
+                            onVideoUrlChange('');
+                            setHasVideo(false);
+                        }
                     }
                 } catch (error) {
                     console.error('Error loading media:', error);
                 }
+            } else {
+                if (onVideoUrlChange) {
+                    onVideoUrlChange('');
+                }
+                setHasVideo(false);
             }
         };
 
         loadMedia();
 
         return () => {
-            cleanup?.();
+            cleanupFunctions.forEach((cleanup) => cleanup());
         };
-    }, [currentSong]);
+    }, [currentSong, onVideoUrlChange]);
+
+    // Pass video ref to parent when ready
+    useEffect(() => {
+        if (onVideoRefReady) {
+            onVideoRefReady(videoRefExternal);
+        }
+    }, [onVideoRefReady]);
 
     useEffect(() => {
         if (currentSong && isPlaying) {
@@ -237,9 +271,8 @@ const Player: React.FC<PlayerProps> = ({
 
     useEffect(() => {
         const playNewSong = async () => {
-            if (currentSong && audioRef.current) {
+            if (currentSong && audioRef.current && !hasVideo) {
                 try {
-                    // Pause the audio and wait for it to complete
                     await audioRef.current.pause();
                     audioRef.current.currentTime = 0;
 
@@ -248,49 +281,24 @@ const Player: React.FC<PlayerProps> = ({
                     );
                     setStreamUrl(streamData.url);
 
-                    // Ensure the audio element's src is updated before calling play()
                     audioRef.current.src = streamData.url;
 
-                    // Ensure pause() has completed before calling play()
                     await new Promise((resolve) => setTimeout(resolve, 100));
 
-                    const isCurrentlyPlaying =
-                        audioRef.current.currentTime > 0 &&
-                        !audioRef.current.paused &&
-                        !audioRef.current.ended &&
-                        audioRef.current.readyState >
-                            audioRef.current.HAVE_CURRENT_DATA;
-
-                    if (!isCurrentlyPlaying) {
-                        const playPromise = audioRef.current.play();
-                        if (playPromise !== undefined) {
-                            await playPromise; // Wait for play to complete
-                            setIsPlaying(true); // Update the state after successful play
-                        }
+                    const playPromise = audioRef.current.play();
+                    if (playPromise !== undefined) {
+                        await playPromise;
+                        setIsPlaying(true);
                     }
                 } catch (error) {
                     console.error('Error starting playback:', error);
                     setIsPlaying(false);
                 }
-            } else {
-                setIsPlaying(false);
-                if (currentSong) {
-                    // We'll explicitly set isPlaying to true before calling playNewSong
-                    setIsPlaying(true); // Set this first
-                    setTimeout(playNewSong, 100);
-                }
             }
         };
 
-        const playPromise = playNewSong();
-        return () => {
-            if (playPromise) {
-                playPromise.then(() => {
-                    setIsPlaying(false);
-                });
-            }
-        };
-    }, [currentSong]);
+        playNewSong();
+    }, [currentSong, hasVideo]);
 
     useEffect(() => {
         if (thumbnailUrl) {
@@ -317,55 +325,46 @@ const Player: React.FC<PlayerProps> = ({
         const bar = e.currentTarget;
         const clickPosition =
             (e.clientX - bar.getBoundingClientRect().left) / bar.offsetWidth;
-        if (audioRef.current) {
-            audioRef.current.currentTime =
-                clickPosition * (audioRef.current.duration || 0);
+
+        if (hasVideo && videoRefExternal.current) {
+            videoRefExternal.current.currentTime = clickPosition * (videoRefExternal.current.duration || 0);
+        } else if (audioRef.current) {
+            audioRef.current.currentTime = clickPosition * (audioRef.current.duration || 0);
         }
     };
 
     const handleTimeUpdate = () => {
-        if (audioRef.current) {
-            const progress =
-                (audioRef.current.currentTime / audioRef.current.duration) *
-                100;
-            setProgress(progress);
-            setCurrentTime(audioRef.current.currentTime);
+        let currentProgress = 0;
+        let currentDuration = 0;
+        let current = 0;
+
+        if (hasVideo && videoRefExternal.current) {
+            current = videoRefExternal.current.currentTime;
+            currentDuration = videoRefExternal.current.duration || 0;
+        } else if (audioRef.current) {
+            current = audioRef.current.currentTime;
+            currentDuration = audioRef.current.duration || 0;
         }
+
+        currentProgress = (current / currentDuration) * 100;
+        setProgress(currentProgress);
+        setCurrentTime(current);
+        setDuration(currentDuration);
     };
 
-    const handleCoverClick = async () => {
-        if (audioRef.current) {
-            try {
-                const streamData = await apiClient.getStream(
-                    `/api/songs/${currentSong?.id}/stream`,
-                );
-                setStreamUrl(streamData.url);
-
-                // Ensure the audio element's src is updated before calling play()
-                audioRef.current.src = streamData.url;
-
-                // Set playing state before starting playback
-                setIsPlaying(true);
-
-                const playPromise = audioRef.current.play();
-                if (playPromise !== undefined) {
-                    await playPromise;
-                }
-            } catch (error) {
-                console.error('Playback failed:', error);
-                setIsPlaying(false);
-            }
-        }
-    };
-
+    // Sync audio element's time update with video if video exists
     useEffect(() => {
-        const thumbnailElement = document.querySelector('.album-cover');
-        thumbnailElement?.addEventListener('click', handleCoverClick);
+        if (hasVideo && videoRefExternal.current) {
+            const video = videoRefExternal.current;
+            video.addEventListener('timeupdate', handleTimeUpdate);
+            video.addEventListener('ended', onNext);
 
-        return () => {
-            thumbnailElement?.removeEventListener('click', handleCoverClick);
-        };
-    }, [thumbnailUrl]);
+            return () => {
+                video.removeEventListener('timeupdate', handleTimeUpdate);
+                video.removeEventListener('ended', onNext);
+            };
+        }
+    }, [hasVideo, onNext]);
 
     return (
         <div className="player-container">
@@ -378,8 +377,7 @@ const Player: React.FC<PlayerProps> = ({
                         />
                     </div>
                     <div className="time-display">
-                        {formatTime(currentTime)} /{' '}
-                        {formatTime(audioRef.current?.duration || 0)}
+                        {formatTime(currentTime)} / {formatTime(duration)}
                     </div>
                 </div>
             </div>
@@ -399,7 +397,9 @@ const Player: React.FC<PlayerProps> = ({
                         onNext={onNext}
                         onPrevious={onPrevious}
                     />
-                    <VolumeControl audioRef={audioRef} />
+                    <VolumeControl
+                        audioRef={hasVideo ? videoRefExternal : audioRef}
+                    />
                 </div>
             </div>
 
@@ -409,7 +409,8 @@ const Player: React.FC<PlayerProps> = ({
                 <div className="wave"></div>
             </div>
 
-            {currentSong && streamUrl && (
+            {/* Audio element - muted if video exists */}
+            {currentSong && streamUrl && !hasVideo && (
                 <audio
                     ref={audioRef}
                     src={streamUrl}

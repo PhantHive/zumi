@@ -1,14 +1,15 @@
 // client/src/renderer/App.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Song, Album } from '../../../shared/types/common';
 import Player from './components/Player';
 import Sidebar from './components/Sidebar';
 import AlbumView from './components/Album';
 import PinLock from './components/PinLock';
 import Settings from './components/Settings';
+import VideoPlayer from './components/VideoPlayer';
+import ZumiAssistant from './components/ZumiAssistant';
 import './styles/global.css';
 import { apiClient } from './utils/apiClient';
-import ZumiChan from './components/ZumiChan';
 import { ipcRenderer } from 'electron';
 
 interface SongsResponse {
@@ -21,9 +22,10 @@ const App: React.FC = () => {
     const [currentSong, setCurrentSong] = useState<Song | null>(null);
     const [albums, setAlbums] = useState<Album[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [showZumiChan] = useState(true);
-    const [isZumiChanOpen, setIsZumiChanOpen] = useState(false);
     const [currentView, setCurrentView] = useState<View>('music');
+    const [videoUrl, setVideoUrl] = useState<string>('');
+    const [isPlaying, setIsPlaying] = useState(false);
+    const videoRef = useRef<HTMLVideoElement | null>(null);
 
     // PIN lock states
     const [hasPin, setHasPin] = useState<boolean>(false);
@@ -31,7 +33,6 @@ const App: React.FC = () => {
     const [isCheckingPin, setIsCheckingPin] = useState<boolean>(true);
 
     useEffect(() => {
-        // Wait for main-ready with a timeout before running checks
         const waitForMainReady = async () => {
             try {
                 await new Promise<void>((resolve) => {
@@ -51,16 +52,14 @@ const App: React.FC = () => {
                 // ignore
             }
 
-            // Check if PIN is set
             const checkPin = async () => {
                 try {
                     const response = await ipcRenderer.invoke('pin:has-pin');
                     console.log('PIN check response:', response);
 
-                    // Extract the actual boolean from the response object
                     const hasPinSet = response?.hasPinSet || false;
                     setHasPin(hasPinSet);
-                    setIsUnlocked(!hasPinSet); // If no PIN, unlock automatically
+                    setIsUnlocked(!hasPinSet);
                 } catch (error) {
                     const msg = error instanceof Error ? error.message : String(error);
                     if (
@@ -94,16 +93,11 @@ const App: React.FC = () => {
         }
     }, [isUnlocked, currentView]);
 
-    const handleZumiWave = () => {
-        setIsZumiChanOpen(!isZumiChanOpen);
-    };
-
     const fetchSongs = async () => {
         try {
             const response = await apiClient.get<SongsResponse>('/api/songs');
             const songs = response.data || [];
 
-            // Group songs by albumId
             const albumMap: { [key: string]: Album } = {};
             songs.forEach((song) => {
                 if (!albumMap[song.albumId]) {
@@ -130,13 +124,10 @@ const App: React.FC = () => {
 
     const handleRandomSong = () => {
         if (albums.length > 0) {
-            const randomAlbum =
-                albums[Math.floor(Math.random() * albums.length)];
+            const randomAlbum = albums[Math.floor(Math.random() * albums.length)];
             if (randomAlbum.songs.length > 0) {
                 const randomSong =
-                    randomAlbum.songs[
-                        Math.floor(Math.random() * randomAlbum.songs.length)
-                        ];
+                    randomAlbum.songs[Math.floor(Math.random() * randomAlbum.songs.length)];
                 setCurrentSong(randomSong);
             }
         }
@@ -150,7 +141,18 @@ const App: React.FC = () => {
         setCurrentView(view);
     };
 
-    // Show loading while checking PIN
+    const handlePlayStateChange = (playing: boolean) => {
+        setIsPlaying(playing);
+    };
+
+    const handleVideoUrlChange = (url: string) => {
+        setVideoUrl(url);
+    };
+
+    const handleVideoRefReady = (ref: React.RefObject<HTMLVideoElement | null>) => {
+        videoRef.current = ref.current;
+    };
+
     if (isCheckingPin) {
         return (
             <div className="loading-container">
@@ -159,54 +161,71 @@ const App: React.FC = () => {
         );
     }
 
-    // Show PIN lock if PIN is set and not unlocked
     if (hasPin && !isUnlocked) {
         return <PinLock onUnlock={handleUnlock} />;
     }
 
-    // Show Settings view
     if (currentView === 'settings') {
         return (
-            <div className="app-container">
+            <div className="app-wrapper">
                 <Sidebar
                     onSongUpload={fetchSongs}
                     currentView={currentView}
                     onNavigate={handleNavigate}
                 />
-                <div className="main-content">
-                    <Settings />
+                <div className="content-wrapper">
+                    <div className="main-content">
+                        <Settings />
+                    </div>
                 </div>
             </div>
         );
     }
 
-    // Show Music view (default)
     return (
-        <>
-            <div className="app-container">
-                <Sidebar
-                    onSongUpload={fetchSongs}
-                    currentView={currentView}
-                    onNavigate={handleNavigate}
+        <div className="app-wrapper">
+            <Sidebar
+                onSongUpload={fetchSongs}
+                currentView={currentView}
+                onNavigate={handleNavigate}
+            />
+            <div className="content-wrapper">
+                {/* Zumi Assistant - Fixed Upper Left */}
+                <ZumiAssistant
+                    isPlaying={isPlaying}
+                    albums={albums}
+                    setCurrentSong={setCurrentSong}
                 />
-                <div className="main-content">
-                    {showZumiChan && (
-                        <ZumiChan
-                            onContinue={handleZumiWave}
-                            albums={albums}
-                            setCurrentSong={setCurrentSong}
-                        />
+
+                {/* Main Layout Area - Split Screen */}
+                <div className="main-layout-area">
+                    {/* Albums Container - Left Side */}
+                    <div className={`albums-container ${videoUrl ? 'with-video' : ''}`}>
+                        {error && <div className="error-message">{error}</div>}
+                        {albums.map((album) => (
+                            <AlbumView
+                                key={album.id}
+                                album={album}
+                                currentSong={currentSong}
+                                onSongSelect={handleSongSelect}
+                            />
+                        ))}
+                    </div>
+
+                    {/* Video Panel - Right Side */}
+                    {videoUrl && (
+                        <div className="video-panel">
+                            <VideoPlayer
+                                videoUrl={videoUrl}
+                                songTitle={currentSong?.title}
+                                artistName={currentSong?.artist}
+                                videoRef={videoRef}
+                            />
+                        </div>
                     )}
-                    {error && <div className="error-message">{error}</div>}
-                    {albums.map((album) => (
-                        <AlbumView
-                            key={album.id}
-                            album={album}
-                            currentSong={currentSong}
-                            onSongSelect={handleSongSelect}
-                        />
-                    ))}
                 </div>
+
+                {/* Player - Bottom Fixed */}
                 <Player
                     currentSong={currentSong}
                     onNext={() => {
@@ -218,10 +237,7 @@ const App: React.FC = () => {
                                 (s) => s.id === currentSong?.id,
                             );
                             const nextSong =
-                                currentAlbum.songs[
-                                (currentIndex + 1) %
-                                currentAlbum.songs.length
-                                    ];
+                                currentAlbum.songs[(currentIndex + 1) % currentAlbum.songs.length];
                             setCurrentSong(nextSong);
                         }
                     }}
@@ -235,20 +251,20 @@ const App: React.FC = () => {
                             );
                             const prevSong =
                                 currentAlbum.songs[
-                                (currentIndex -
-                                    1 +
-                                    currentAlbum.songs.length) %
+                                (currentIndex - 1 + currentAlbum.songs.length) %
                                 currentAlbum.songs.length
                                     ];
                             setCurrentSong(prevSong);
                         }
                     }}
                     onRandomSong={handleRandomSong}
+                    onPlayStateChange={handlePlayStateChange}
+                    onVideoUrlChange={handleVideoUrlChange}
+                    onVideoRefReady={handleVideoRefReady}
                 />
             </div>
-        </>
+        </div>
     );
 };
 
 export default App;
-

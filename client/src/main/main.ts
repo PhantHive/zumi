@@ -12,22 +12,6 @@ import { promises as fs } from 'fs'
 const discordRPC = new DiscordPresence();
 const authHandler = new AuthHandler();
 
-// Ensure IPC handlers that the renderer may call early are registered now
-try {
-    // Provide runtime API port to renderer on demand (early)
-    ipcMain.handle('get-runtime-api-port', () => {
-        try {
-            const runtimeApiPort = process.env.API_PORT || process.env.PORT || null;
-            console.log('get-runtime-api-port called, returning:', runtimeApiPort);
-            return runtimeApiPort;
-        } catch (err) {
-            console.error('Error in get-runtime-api-port handler:', err);
-            return null;
-        }
-    });
-} catch (err) {
-    console.warn('Early IPC handler registration failed (continuing):', err);
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,17 +22,20 @@ async function createWindow() {
     console.log('Current __dirname:', __dirname);
 
     const win = new BrowserWindow({
-        width: 1200,
-        height: 800,
+        width: 1400,
+        height: 900,
+        minWidth: 1200,
+        minHeight: 850,
         frame: false,
         transparent: true,
+        resizable: true,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
             webSecurity: false,
             devTools: true,
         },
-        icon: path.join(__dirname, '../assets/icon.png'),
+        icon: path.join(__dirname, '../assets/icon.ico'),
     });
 
     win.on('close', () => {
@@ -65,18 +52,6 @@ async function createWindow() {
     win.webContents.on('did-finish-load', () => {
         console.log('Finished loading');
         win.webContents.openDevTools();
-        // Notify renderer that main is ready and provide runtime API info
-        try {
-            const runtimeApiPort = process.env.API_PORT || process.env.PORT || null;
-            const runtimeApiUrl = runtimeApiPort ? `http://localhost:${runtimeApiPort}` : null;
-            win.webContents.send('main-ready', {
-                apiPort: runtimeApiPort,
-                apiUrl: runtimeApiUrl,
-            });
-            console.log('Sent main-ready to renderer with API info:', runtimeApiUrl);
-        } catch (err) {
-            console.warn('Failed to send main-ready message:', err);
-        }
     });
 
     win.setThumbnailToolTip('Zumi Chan');
@@ -146,46 +121,21 @@ app.whenReady().then(async () => {
         console.log('Stored tokens:', storedTokens);
         if (storedTokens?.access_token) {
             console.log('Found stored credentials, validating with server...');
-            try {
-                const validation = await authHandler.validateWithServer(storedTokens.access_token);
-                if (!validation || !validation.token) {
-                    console.warn('Initial server validation did not return a token, clearing stored server token');
-                    authHandler.clearServerToken();
-                }
-            } catch (err) {
-                console.error('Error validating stored credentials:', err);
-                // Clear stored server token if validation failed (network or server error)
-                try {
-                    authHandler.clearServerToken();
-                } catch (clearErr) {
-                    console.error('Failed to clear stored server token after validation error:', clearErr);
-                }
-            }
+            await authHandler.validateWithServer(storedTokens.access_token);
         }
     } catch (error) {
-        console.error('Error reading stored tokens:', error);
+        console.error('Error validating stored credentials:', error);
     }
 
     const isDev = process.env.NODE_ENV === 'development';
 
-    if (!isDev) {
-        if (process.defaultApp) {
-            if (process.argv.length >= 2) {
-                app.setAsDefaultProtocolClient('zumi', process.execPath, [
-                    process.argv[1],
-                ]);
-            }
-        } else {
-            app.setAsDefaultProtocolClient('zumi');
-        }
-    }
-
-    app.on('open-url', (event, url) => {
-        event.preventDefault();
-        if (!isDev) {
-            authHandler.handleCallback(url);
-        }
-    });
+    // REMOVED: Protocol handler registration that was interfering with Google OAuth
+    // The zumi:// protocol handler was causing Google OAuth to try using
+    // zumi://oauth/callback instead of http://localhost:3000/oauth/callback
+    // This caused Error 400: invalid_request from Google
+    //
+    // If you need deep linking in the future, implement it AFTER OAuth is working
+    // and ensure it doesn't interfere with the OAuth flow
 
     const win = BrowserWindow.getFocusedWindow();
 
@@ -217,54 +167,11 @@ app.whenReady().then(async () => {
             const serverToken = authHandler.getServerToken();
             console.log('Server token exists:', !!serverToken);
 
-            // Only consider the user authenticated if we have a server-side JWT
-            if (!serverToken) {
-                console.warn('User has Google tokens but no server JWT; treating as unauthenticated');
-                return { success: false, error: 'Not authenticated with server' };
-            }
-
-            // Validate the server JWT with the backend to ensure it's still valid
-            try {
-                const runtimeApiPort = process.env.API_PORT || process.env.PORT || null;
-                const apiBase = runtimeApiPort ? `http://localhost:${runtimeApiPort}` : undefined;
-                const profileUrl = apiBase ? `${apiBase}/api/auth/profile` : undefined;
-
-                const urlToCall = profileUrl || `http://${process.env.VPS_IP}:${process.env.API_PORT}/api/auth/profile`;
-
-                console.log('Validating server JWT with backend at:', urlToCall);
-
-                const res = await fetch(urlToCall, {
-                    headers: {
-                        Authorization: `Bearer ${serverToken}`,
-                        Accept: 'application/json',
-                    },
-                });
-
-                if (!res.ok) {
-                    console.warn('Server JWT validation failed, clearing stored token. Status:', res.status);
-                    authHandler.clearServerToken();
-                    return { success: false, error: 'Server token invalid' };
-                }
-
-                const profileData = await res.json();
-
-                // Return authenticated with server-validated profile
-                return {
-                    success: true,
-                    data: profileData.data || profileData,
-                    token: serverToken,
-                };
-            } catch (err) {
-                console.error('Error validating server token with backend:', err);
-                // If validation failed due to network, be conservative and clear token so user is not treated as authenticated
-                try {
-                    authHandler.clearServerToken();
-                } catch (clearErr) {
-                    console.error('Failed to clear server token after validation error:', clearErr);
-                }
-
-                return { success: false, error: 'Server validation error' };
-            }
+            return {
+                success: true,
+                data: userInfo,
+                token: serverToken, // Include server token
+            };
         } catch (error: unknown) {
             if (error instanceof Error) {
                 console.error('Get user info error:', error.message);
@@ -403,9 +310,8 @@ app.on('activate', () => {
     }
 });
 
-app.on('open-url', (event, url) => {
-    event.preventDefault();
-    authHandler.handleCallback(url);
-});
+// REMOVED: Duplicate 'open-url' handler that was also interfering with OAuth
+// This was a duplicate of the handler that was inside app.whenReady()
+// and wasn't needed since we're using HTTP redirect, not custom protocol
 
 export default app;

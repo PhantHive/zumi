@@ -4,6 +4,14 @@
     --background-dark: rgba(0, 0, 0, 0.5);
     --thumbnail-color-1: var(--primary-color);
     --thumbnail-color-2: var(--secondary-color);
+    --player-height: 180px;
+    --min-width: 768px;
+    --video-panel-width: 450px;
+    --assistant-height: 310px;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body {
@@ -13,6 +21,7 @@ body {
     color: white;
     height: 100vh;
     overflow: hidden;
+    min-width: var(--min-width);
 }
 
 body::before {
@@ -23,9 +32,9 @@ body::before {
     right: 0;
     bottom: 0;
     background: linear-gradient(
-        180deg,
-        var(--thumbnail-color-1) 0%,
-        transparent 40%
+            180deg,
+            var(--thumbnail-color-1) 0%,
+            transparent 40%
     );
     opacity: 0.3;
     transition: background 0.5s ease;
@@ -33,11 +42,111 @@ body::before {
     z-index: 0;
 }
 
+/* Main App Layout */
+.app-wrapper {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    min-width: var(--min-width);
+}
+
+.content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+}
+
+/* Main Layout Area - Split Screen Container */
+.main-layout-area {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    width: 100%;
+}
+
+/* Albums Container - Left Side with left margin for assistant */
+.albums-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px;
+    padding-left: 320px; /* Space for assistant on the left */
+    padding-top: calc(var(--assistant-height) + 10px); /* Space at top for assistant */
+    padding-bottom: calc(var(--player-height) + 20px);
+    width: 100%;
+    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When video is present - albums take left side */
+.albums-container.with-video {
+    max-width: calc(100% - var(--video-panel-width));
+    padding-right: 20px;
+}
+
+/* Custom Scrollbar */
+.albums-container::-webkit-scrollbar {
+    width: 12px;
+}
+
+.albums-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+    margin: 4px;
+}
+
+.albums-container::-webkit-scrollbar-thumb {
+    background: linear-gradient(
+            180deg,
+            rgba(255, 107, 157, 0.6) 0%,
+            rgba(255, 183, 206, 0.6) 100%
+    );
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.albums-container::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(
+            180deg,
+            rgba(255, 107, 157, 0.8) 0%,
+            rgba(255, 183, 206, 0.8) 100%
+    );
+    background-clip: padding-box;
+}
+
+/* Video Panel - Right Side */
+.video-panel {
+    width: var(--video-panel-width);
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-left: 1px solid rgba(255, 182, 193, 0.2);
+    overflow: hidden;
+    position: relative;
+    animation: slideInRight 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Legacy Compatibility */
 .app-container {
     display: flex;
     flex-direction: row;
     height: 100vh;
     position: relative;
+    min-width: var(--min-width);
 }
 
 .main-content {
@@ -46,16 +155,20 @@ body::before {
     padding: 20px;
     overflow-y: auto;
     transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-sizing: border-box;
+    max-width: 1800px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .main-content.sidebar-open {
-    margin-left: 20vw; /* Match sidebar width */
+    margin-left: 20vw;
 }
 
+/* Song List */
 .song-list {
     list-style: none;
     padding: 0;
+    margin: 0;
 }
 
 .song-item {
@@ -77,6 +190,135 @@ body::before {
     border: 1px solid rgba(255, 255, 255, 0.5);
 }
 
+/* Utility Classes */
 .hidden {
     display: none;
+}
+
+/* Error Messages */
+.error-message {
+    background: rgba(255, 107, 157, 0.2);
+    border: 1px solid rgba(255, 107, 157, 0.5);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin: 20px;
+    color: #ff6b9d;
+    font-weight: 500;
+    text-align: center;
+}
+
+/* Loading Container */
+.loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    min-width: var(--min-width);
+}
+
+.loading-text {
+    color: white;
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1400px) {
+    :root {
+        --video-panel-width: 400px;
+        --hologram-space: 280px;
+    }
+
+    .albums-container {
+        padding: 16px;
+        padding-bottom: calc(var(--player-height) + 16px);
+        padding-right: var(--hologram-space);
+    }
+
+    .albums-container.with-video {
+        padding-right: 16px;
+    }
+}
+
+@media (max-width: 1200px) {
+    :root {
+        --video-panel-width: 350px;
+        --hologram-space: 240px;
+    }
+
+    .main-content {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 900px) {
+    :root {
+        --hologram-space: 200px;
+    }
+
+    /* Stack video below on smaller screens */
+    .main-layout-area {
+        flex-direction: column;
+    }
+
+    .albums-container.with-video {
+        max-width: 100%;
+        padding-right: var(--hologram-space);
+    }
+
+    .video-panel {
+        width: 100%;
+        height: 50vh;
+        border-left: none;
+        border-top: 1px solid rgba(255, 182, 193, 0.2);
+    }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --min-width: 320px;
+        --hologram-space: 160px;
+    }
+
+    body {
+        min-width: 320px;
+    }
+
+    .app-wrapper {
+        min-width: 320px;
+    }
+
+    .albums-container {
+        padding: 12px;
+        padding-bottom: calc(var(--player-height) + 12px);
+        padding-right: var(--hologram-space);
+    }
+
+    .main-content {
+        padding: 12px;
+    }
+
+    .albums-container::-webkit-scrollbar {
+        width: 8px;
+    }
+}
+
+/* Wide Screen Optimization */
+@media (min-width: 1800px) {
+    :root {
+        --video-panel-width: 500px;
+    }
+}
+
+/* Ultra-Wide Screen */
+@media (min-width: 2400px) {
+    :root {
+        --video-panel-width: 600px;
+    }
+}
+
+/* Prevent content shift on scrollbar */
+.albums-container {
+    scrollbar-gutter: stable;
 }

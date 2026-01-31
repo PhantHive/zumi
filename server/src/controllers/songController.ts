@@ -122,7 +122,8 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user?.email;
-            const song = await db.getSongById(parseInt(req.params.id));
+            const songId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const song = await db.getSongById(parseInt(songId));
 
             if (!song) {
                 res.status(404).json({ error: 'Song not found' });
@@ -213,7 +214,7 @@ export class SongController {
                 duration: Math.floor(duration),
                 albumId: req.body.album || tagAlbum || 'Unknown Album',
                 filepath: path.join(baseMusicPath, audioFile.filename),
-                thumbnailUrl: thumbnailUrl || 'placeholder.jpg',
+                thumbnailUrl: thumbnailUrl || 'placeholder.png',
                 videoUrl, // NEW: Include video URL
                 uploadedBy: userEmail,
                 visibility: req.body.visibility || 'public',
@@ -240,7 +241,8 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user?.email;
-            const song = await db.getSongById(parseInt(req.params.id));
+            const songId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const song = await db.getSongById(parseInt(songId));
 
             if (!song) {
                 res.status(404).json({ error: 'Song not found' });
@@ -275,7 +277,8 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user?.email;
-            const song = await db.getSongById(parseInt(req.params.id));
+            const songId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const song = await db.getSongById(parseInt(songId));
 
             if (!song) {
                 res.status(404).json({ error: 'Song not found' });
@@ -310,7 +313,38 @@ export class SongController {
                 return;
             }
 
-            res.sendFile(path.resolve(videoPath));
+            // Get file stats for range support
+            const stat = fs.statSync(videoPath);
+            const fileSize = stat.size;
+            const range = req.headers.range;
+
+            if (range) {
+                // Parse range header
+                const parts = range.replace(/bytes=/, '').split('-');
+                const start = parseInt(parts[0], 10);
+                const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+                const chunksize = end - start + 1;
+
+                // Create read stream for the requested range
+                const file = fs.createReadStream(videoPath, { start, end });
+
+                // Set response headers for partial content
+                res.writeHead(206, {
+                    'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': chunksize,
+                    'Content-Type': 'video/mp4',
+                });
+
+                file.pipe(res);
+            } else {
+                // Send entire file if no range requested
+                res.writeHead(200, {
+                    'Content-Length': fileSize,
+                    'Content-Type': 'video/mp4',
+                });
+                fs.createReadStream(videoPath).pipe(res);
+            }
         } catch (error: unknown) {
             if (error instanceof Error) {
                 console.error('Error streaming video:', error);
@@ -337,7 +371,8 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user.email;
-            const songId = parseInt(req.params.id);
+            const songIdParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const songId = parseInt(songIdParam);
             const { visibility } = req.body;
 
             if (!visibility || !['public', 'private'].includes(visibility)) {
@@ -371,14 +406,12 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user.email;
-            const songId = parseInt(req.params.id);
+            const songIdParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const songId = parseInt(songIdParam);
             const multerReq = req as MulterRequest;
 
             const isDev = process.env.NODE_ENV === 'development';
             const baseMusicPath = isDev ? './public/data' : '/app/data';
-            const baseVideoPath = isDev
-                ? './public/uploads/videos'
-                : '/app/uploads/videos'; // NEW: Video base path for updates
 
             const updates: any = {};
 
@@ -455,7 +488,8 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user.email;
-            const songId = parseInt(req.params.id);
+            const songIdParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const songId = parseInt(songIdParam);
 
             const success = await db.deleteSong(songId, userEmail);
 
@@ -478,7 +512,8 @@ export class SongController {
     // Simple administrative delete: remove song row by id regardless of uploader
     deleteSongRow: RequestHandler = async (req, res) => {
         try {
-            const songId = parseInt(req.params.id);
+            const songIdParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const songId = parseInt(songIdParam);
             if (Number.isNaN(songId)) {
                 res.status(400).json({ error: 'Invalid song id' });
                 return;
@@ -501,7 +536,8 @@ export class SongController {
         try {
             const authenticatedReq = req as AuthenticatedRequest;
             const userId = authenticatedReq.user.id;
-            const songId = parseInt(req.params.id);
+            const songIdParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+            const songId = parseInt(songIdParam);
 
             // Verify song exists and user has access
             const userEmail = authenticatedReq.user.email;
@@ -593,6 +629,19 @@ export class SongController {
             res.status(500).json({ error: 'Failed to fetch genres' });
         }
     };
+
+    getGenres: RequestHandler = async (_req, res) => {
+        try {
+            const genres = await db.getUniqueGenres();
+            res.json({ data: genres });
+        } catch (error: unknown) {
+            if (error instanceof Error) {
+                console.error('Error fetching genres:', error);
+            }
+            res.status(500).json({ error: 'Internal server error' });
+        }
+    };
 }
 
 export const songController = new SongController();
+

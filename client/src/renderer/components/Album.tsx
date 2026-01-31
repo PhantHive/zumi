@@ -11,9 +11,7 @@ interface AlbumProps {
 }
 
 const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
-    const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>(
-        {},
-    );
+    const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
 
     useEffect(() => {
         const cleanupFunctions: (() => void)[] = [];
@@ -44,7 +42,6 @@ const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
 
         loadThumbnails();
 
-        // Cleanup function
         return () => {
             cleanupFunctions.forEach((cleanup) => cleanup());
         };
@@ -88,9 +85,7 @@ const Album: React.FC<AlbumProps> = ({ album, onSongSelect, currentSong }) => {
                             className="song-thumbnail"
                             onError={(e) => {
                                 const img = e.target as HTMLImageElement;
-                                img.src = getAssetPath(
-                                    'images/placeholder.jpg',
-                                );
+                                img.src = getAssetPath('images/placeholder.jpg');
                             }}
                         />
                         <div className="song-title">{song.title}</div>

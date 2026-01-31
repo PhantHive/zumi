@@ -37,18 +37,18 @@ const TitleBar: React.FC = () => {
         <div className="titlebar">
             <div className="titlebar-left">
                 <img
-                    src={getAssetPath('images/mascot.png')}
-                    alt="Waifu Mascot"
+                    src={getAssetPath('images/zumi-icon.png')}
+                    alt="Zumi Icon"
                     className="titlebar-mascot"
                 />
                 <span className="titlebar-text">ZUMI</span>
             </div>
             <div className="titlebar-buttons">
                 <button className="min-btn" onClick={handleMinimize}>
-                    –
+                    —
                 </button>
                 <button className="max-btn" onClick={handleMaximize}>
-                    {isMaximized ? '❐' : '□'}
+                    {isMaximized ? '❐' : '▢'}
                 </button>
                 <button className="close-btn" onClick={handleClose}>
                     ×

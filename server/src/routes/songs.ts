@@ -6,7 +6,6 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { extractColors } from '../utils/colorExtractor.js';
-import { downloadFromYoutube } from '../utils/youtubeImporter.js';
 
 const router = Router();
 const isDev = process.env.NODE_ENV === 'development';
@@ -80,6 +79,7 @@ router.use(auth);
 router.get('/', songController.getAllSongs);
 router.get('/artists', songController.getArtists);
 router.get('/albums', songController.getAlbums);
+router.get('/genres', songController.getGenres);
 router.get('/my-uploads', songController.getMyUploads);
 router.get('/liked', songController.getLikedSongs);
 
@@ -200,35 +200,7 @@ router.get('/thumbnails/:filename/colors', async (req, res) => {
 });
 
 // New: return top genres for recommendations
-router.get('/genres', songController.getTopGenres);
-
-// Add import endpoint for admin/authorized users: POST /api/songs/import-youtube
-// Body: { urls: string[] }
-router.post('/import-youtube', async (req: Request, res: Response) => {
-    try {
-        const authenticatedReq = req as any;
-        const userEmail = authenticatedReq.user?.email;
-        const urls: string[] = req.body.urls;
-        if (!Array.isArray(urls) || urls.length === 0) {
-            res.status(400).json({ error: 'No urls provided' });
-            return;
-        }
-
-        console.log('Starting YouTube import for urls:', urls);
-        const results = await downloadFromYoutube(urls, userEmail);
-
-        res.json({ data: results });
-    } catch (error) {
-        console.error('YouTube import failed:', error);
-        // In development return the detailed error so clients can display it for debugging
-        if (isDev) {
-            const message = error instanceof Error ? error.message : String(error);
-            res.status(500).json({ error: message });
-        } else {
-            res.status(500).json({ error: 'Failed to import from YouTube' });
-        }
-    }
-});
+// router.get('/genres', songController.getGenres);
 
 export const staticPaths = {
     uploads: isDev

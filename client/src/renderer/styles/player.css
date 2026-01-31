@@ -1,14 +1,17 @@
-/* player.scss */
+/* player.css */
 .player-container {
     position: fixed;
     bottom: 0;
-    width: 100%;
+    left: 0;
+    right: 0;
+    height: var(--player-height, 180px);
     background: var(--background-dark);
     backdrop-filter: blur(10px);
     display: flex;
     flex-direction: column;
     padding: 1rem;
-    z-index: 10;
+    z-index: 50;
+    border-top: 1px solid rgba(255, 182, 193, 0.2);
 }
 
 .progress-section {
@@ -38,9 +41,9 @@
 .progress-current {
     height: 100%;
     background: linear-gradient(
-        90deg,
-        var(--thumbnail-color-1, var(--primary-color)),
-        var(--thumbnail-color-2, var(--secondary-color))
+            90deg,
+            var(--thumbnail-color-1, var(--primary-color)),
+            var(--thumbnail-color-2, var(--secondary-color))
     );
     transition: width 0.1s linear;
 }
@@ -57,15 +60,18 @@
 .player-content {
     display: flex;
     align-items: center;
-    padding: 1rem 5%;
+    padding: 0.5rem 5%;
     gap: 2rem;
+    flex: 1;
 }
 
 .thumbnail {
     width: 10vw;
-    height: auto;
+    max-width: 120px;
+    min-width: 80px;
+    aspect-ratio: 1; /* ← ADD THIS - Forces square */
     border-radius: 8px;
-    object-fit: cover;
+    object-fit: cover; /* Already there - crops to fit */
     box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
     transition: all 0.3s ease;
     cursor: pointer;
@@ -76,14 +82,13 @@
     z-index: 100;
     bottom: 5vh;
     width: 25vw;
-    height: auto;
+    aspect-ratio: 1; /* ← ADD THIS too for expanded view */
     max-height: 80vh;
     max-width: 80vw;
     border-radius: 16px;
     box-shadow: 0 0 25px rgba(255, 255, 255, 0.5);
 }
 
-/* don't make hover effect on active element */
 .thumbnail:not(.active):hover {
     transform: scale(1.2);
     box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
@@ -117,6 +122,7 @@
     width: 100vw;
     height: 2rem;
     overflow: hidden;
+    pointer-events: none;
 }
 
 .wave {
@@ -126,9 +132,9 @@
     width: 200%;
     height: 100%;
     background: linear-gradient(
-        120deg,
-        var(--primary-color),
-        var(--secondary-color)
+            120deg,
+            var(--primary-color),
+            var(--secondary-color)
     );
     opacity: 0.1;
     animation: wave 8s linear infinite;
@@ -196,4 +202,26 @@
     background: white;
     cursor: pointer;
     box-shadow: -100px 0 0 95px var(--primary-color);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .player-container {
+        height: 150px;
+        padding: 0.75rem;
+    }
+
+    .player-content {
+        padding: 0.5rem 3%;
+        gap: 1rem;
+    }
+
+    .thumbnail {
+        width: 15vw;
+        min-width: 60px;
+    }
+
+    .volume-control {
+        display: none; /* Hide volume on mobile to save space */
+    }
 }

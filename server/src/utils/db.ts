@@ -117,7 +117,7 @@ export class DbClient {
         this.db.all(
             'PRAGMA table_info(songs)',
             [],
-            (err, columns: Array<{ name: string }>) => {
+            (err: Error | null, columns: Array<{ name: string }>) => {
                 if (err) {
                     console.error('Error checking table structure:', err);
                     return;
@@ -169,7 +169,7 @@ export class DbClient {
 
                 migrations.forEach(({ name, sql }) => {
                     if (!columnNames.includes(name)) {
-                        this.db.run(sql, (err) => {
+                        this.db.run(sql, (err: Error | null) => {
                             if (err) {
                                 console.error(
                                     `Error adding column ${name}:`,
@@ -188,7 +188,7 @@ export class DbClient {
                 setTimeout(() => {
                     this.db.run(
                         "UPDATE songs SET visibility = 'public' WHERE visibility IS NULL",
-                        (err) => {
+                        (err: Error | null) => {
                             if (err)
                                 console.error(
                                     'Error setting default visibility:',
@@ -198,7 +198,7 @@ export class DbClient {
                     );
                     this.db.run(
                         'UPDATE songs SET playCount = 0 WHERE playCount IS NULL',
-                        (err) => {
+                        (err: Error | null) => {
                             if (err)
                                 console.error(
                                     'Error setting default playCount:',
@@ -213,10 +213,10 @@ export class DbClient {
 
     async getUniqueAlbums(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.db.all<AlbumRow>(
+            this.db.all(
                 'SELECT DISTINCT albumId FROM songs',
                 [],
-                (err, rows) => {
+                (err: Error | null, rows: AlbumRow[]) => {
                     if (err) reject(err);
                     resolve(rows.map((row) => row.albumId));
                 },
@@ -226,10 +226,10 @@ export class DbClient {
 
     async getUniqueArtists(): Promise<string[]> {
         return new Promise((resolve, reject) => {
-            this.db.all<ArtistRow>(
+            this.db.all(
                 'SELECT DISTINCT artist FROM songs',
                 [],
-                (err, rows) => {
+                (err: Error | null, rows: ArtistRow[]) => {
                     if (err) reject(err);
                     resolve(rows.map((row) => row.artist));
                 },
@@ -239,10 +239,10 @@ export class DbClient {
 
     async getSongById(id: number): Promise<Song | null> {
         return new Promise((resolve, reject) => {
-            this.db.get<SongRow>(
+            this.db.get(
                 'SELECT * FROM songs WHERE id = ?',
                 [id],
-                (err, row) => {
+                (err: Error | null, row: SongRow | undefined) => {
                     if (err) reject(err);
                     resolve(row ? convertSongRow(row) : null);
                 },
@@ -306,7 +306,7 @@ export class DbClient {
             this.db.all(
                 `SELECT genre, COUNT(*) as count FROM songs WHERE genre IS NOT NULL GROUP BY genre ORDER BY count DESC LIMIT ?`,
                 [limit],
-                (err, rows: Array<{ genre: string; count: number }>) => {
+                (err: Error | null, rows: Array<{ genre: string; count: number }>) => {
                     if (err) return reject(err);
                     resolve(rows.map((r) => ({ genre: r.genre, count: r.count })));
                 },
@@ -325,7 +325,7 @@ export class DbClient {
                 params.push(userEmail);
             }
 
-            this.db.all<SongRow>(sql, params, (err, rows) => {
+            this.db.all(sql, params, (err: Error | null, rows: SongRow[]) => {
                 if (err) reject(err);
                 console.log('Retrieved songs:', rows); // Debug log
                 resolve(rows.map(convertSongRow));
@@ -368,7 +368,7 @@ export class DbClient {
                 params.push(`%${filters.tags}%`);
             }
 
-            this.db.all<SongRow>(sql, params, (err, rows) => {
+            this.db.all(sql, params, (err: Error | null, rows: SongRow[]) => {
                 if (err) reject(err);
                 resolve(rows.map(convertSongRow));
             });
@@ -377,10 +377,10 @@ export class DbClient {
 
     async getSongsByUploader(uploadedBy: string): Promise<Song[]> {
         return new Promise((resolve, reject) => {
-            this.db.all<SongRow>(
+            this.db.all(
                 'SELECT * FROM songs WHERE uploadedBy = ?',
                 [uploadedBy],
-                (err, rows) => {
+                (err: Error | null, rows: SongRow[]) => {
                     if (err) reject(err);
                     resolve(rows.map(convertSongRow));
                 },
@@ -404,7 +404,7 @@ export class DbClient {
 
             params.push(q, q, q, q);
 
-            this.db.all<SongRow>(sql, params, (err, rows) => {
+            this.db.all(sql, params, (err: Error | null, rows: SongRow[]) => {
                 if (err) return reject(err);
                 resolve(rows.map(convertSongRow));
             });
@@ -420,7 +420,7 @@ export class DbClient {
             this.db.run(
                 'UPDATE songs SET visibility = ? WHERE id = ? AND uploadedBy = ?',
                 [visibility, id, uploaderEmail],
-                function (err) {
+                function (this: { changes: number }, err: Error | null) {
                     if (err) {
                         reject(err);
                         return;
@@ -525,10 +525,23 @@ export class DbClient {
 
     async close(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.db.close((err) => {
+            this.db.close((err: Error | null) => {
                 if (err) reject(err);
                 resolve();
             });
+        });
+    }
+
+    async getUniqueGenres(): Promise<{ genre: string; count: number }[]> {
+        return new Promise((resolve, reject) => {
+            this.db.all(
+                'SELECT genre, COUNT(*) as count FROM songs WHERE genre IS NOT NULL AND genre != "" GROUP BY genre ORDER BY count DESC',
+                [],
+                (err: Error | null, rows: { genre: string; count: number }[]) => {
+                    if (err) reject(err);
+                    resolve(rows);
+                },
+            );
         });
     }
 }

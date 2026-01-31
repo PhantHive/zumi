@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface VolumeProps {
-    audioRef: React.RefObject<HTMLAudioElement | null>;
+    audioRef: React.RefObject<HTMLAudioElement | HTMLVideoElement | null>;
 }
 
 const VolumeControl: React.FC<VolumeProps> = ({ audioRef }) => {
@@ -23,6 +23,22 @@ const VolumeControl: React.FC<VolumeProps> = ({ audioRef }) => {
             setIsMuted(!isMuted);
         }
     };
+
+    // Sync with external volume changes
+    useEffect(() => {
+        const element = audioRef.current;
+        if (!element) return;
+
+        const handleVolumeChangeEvent = () => {
+            setVolume(Math.round(element.volume * 100));
+            setIsMuted(element.muted);
+        };
+
+        element.addEventListener('volumechange', handleVolumeChangeEvent);
+        return () => {
+            element.removeEventListener('volumechange', handleVolumeChangeEvent);
+        };
+    }, [audioRef]);
 
     return (
         <div className="volume-control">

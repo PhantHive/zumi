@@ -24,9 +24,7 @@ RUN apt-get update && apt-get install -y \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp BINARY (no Python module needed!)
-RUN curl -L -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
-    chmod +x /usr/local/bin/yt-dlp
+# yt-dlp removed from image build (YouTube functionality disabled)
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
@@ -40,9 +38,7 @@ RUN npm install
 COPY dist/ ./dist/
 COPY shared/ ./shared/
 
-# Copy Python tools directory (script calls yt-dlp binary)
-COPY server/tools/ ./server/tools/
-RUN chmod +x ./server/tools/*.py
+# Python tools directory removed (YouTube-related tools disabled)
 
 # Create config directory (will be mounted at runtime)
 RUN mkdir -p /app/config

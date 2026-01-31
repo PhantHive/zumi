@@ -16,7 +16,7 @@ const migrateDatabase = () => {
         db.all(
             'PRAGMA table_info(songs)',
             [],
-            (err, columns: Array<{ name: string }>) => {
+            (err: Error | null, columns: Array<{ name: string }>) => {
                 if (err) {
                     console.error('Error checking table structure:', err);
                     return;
@@ -67,7 +67,7 @@ const migrateDatabase = () => {
 
                 newColumns.forEach(({ name, sql }) => {
                     if (!columnNames.includes(name)) {
-                        db.run(sql, (err) => {
+                        db.run(sql, (err: Error | null) => {
                             if (err) {
                                 console.error(
                                     `Error adding column ${name}:`,
@@ -90,7 +90,7 @@ const migrateDatabase = () => {
                 setTimeout(() => {
                     db.run(
                         "UPDATE songs SET visibility = 'public' WHERE visibility IS NULL",
-                        (err) => {
+                        (err: Error | null) => {
                             if (err) {
                                 console.error(
                                     'Error setting default visibility:',
@@ -106,7 +106,7 @@ const migrateDatabase = () => {
 
                     db.run(
                         'UPDATE songs SET playCount = 0 WHERE playCount IS NULL',
-                        (err) => {
+                        (err: Error | null) => {
                             if (err) {
                                 console.error(
                                     'Error setting default playCount:',

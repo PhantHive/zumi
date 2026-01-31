@@ -30,7 +30,7 @@ interface StoreSchema {
     serverToken: string;
     user: UserData;
     test: string;
-    pinHash?: string;
+    pinHash: string;
 }
 
 let prodEnv = {
@@ -185,8 +185,11 @@ export class AuthHandler {
             this.logToFile(`Access token: ${storedTokens.access_token}`);
             // Validate with server if we don't have a server token
             if (!this.getServerToken()) {
-                // Let validation errors bubble up so callers (and ipc handlers) can detect failed server validation
-                await this.validateWithServer(storedTokens.access_token);
+                try {
+                    await this.validateWithServer(storedTokens.access_token);
+                } catch (error) {
+                    console.error('Failed to validate with server:', error);
+                }
             }
         }
 
@@ -296,17 +299,15 @@ export class AuthHandler {
         }
     }
 
-    // Clear stored server token and user information
     clearServerToken(): void {
+        console.log('=== Clearing Server Token ===');
         try {
             this.store?.delete('serverToken');
-            this.store?.delete('user');
-            console.log('Cleared stored server token and user data');
+            console.log('Server token cleared successfully');
         } catch (err) {
-            console.error('Failed to clear server token:', err);
+            console.error('Error clearing server token:', err);
         }
     }
-
     async signIn(): Promise<void> {
         // Check if we have stored tokens
         const storedTokens = await this.getStoredTokens();

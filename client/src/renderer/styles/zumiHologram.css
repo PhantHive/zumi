@@ -1,0 +1,453 @@
+/* client/src/renderer/styles/zumiHologram.css */
+
+.hologram-container {
+    position: fixed;
+    z-index: 500;
+    transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+}
+
+/* When video panel exists, shift hologram to the left */
+.hologram-container.with-video {
+    right: calc(var(--video-panel-width) + 40px) !important;
+}
+
+/* Compact state - Bottom right corner */
+.hologram-container.compact {
+    right: 30px;
+    bottom: calc(var(--player-height, 180px) + 30px);
+    transform: scale(0.75);
+}
+
+/* Expanded state - Larger when music playing */
+.hologram-container.expanded {
+    right: 40px;
+    bottom: calc(var(--player-height, 180px) + 20px);
+    transform: scale(1);
+}
+
+/* Main Device Frame */
+.hologram-device {
+    position: relative;
+    width: 350px;
+    height: 650px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    filter: drop-shadow(0 20px 60px rgba(0, 255, 255, 0.3));
+    pointer-events: auto;
+}
+
+/* Top Cap */
+.device-cap {
+    width: 175px;
+    height: 50px;
+    position: relative;
+    z-index: 3;
+}
+
+.device-cap.top {
+    background: linear-gradient(180deg,
+    rgba(20, 30, 48, 0.95) 0%,
+    rgba(30, 45, 70, 0.9) 100%
+    );
+    border-radius: 70px 70px 0 0;
+    border: 2px solid rgba(0, 255, 255, 0.3);
+    border-bottom: none;
+    box-shadow:
+            inset 0 2px 10px rgba(0, 255, 255, 0.2),
+            0 -5px 20px rgba(0, 255, 255, 0.15);
+}
+
+.cap-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    height: 60%;
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    border-radius: 50%;
+}
+
+.cap-glow {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60%;
+    height: 4px;
+    background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 255, 255, 0.6) 50%,
+    transparent 100%
+    );
+    border-radius: 2px;
+    animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Main Cylinder */
+.device-cylinder {
+    width: 175px;
+    height: 475px;
+    position: relative;
+    background: linear-gradient(180deg,
+    rgba(15, 25, 40, 0.4) 0%,
+    rgba(20, 30, 50, 0.3) 50%,
+    rgba(15, 25, 40, 0.4) 100%
+    );
+    border-left: 2px solid rgba(0, 255, 255, 0.25);
+    border-right: 2px solid rgba(0, 255, 255, 0.25);
+    overflow: hidden;
+    box-shadow:
+            inset 0 0 30px rgba(0, 255, 255, 0.1),
+            inset 0 0 60px rgba(0, 150, 255, 0.05);
+}
+
+/* Glass effect layers */
+.glass-layer {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+    );
+    pointer-events: none;
+}
+
+.glass-reflection {
+    position: absolute;
+    top: 0;
+    left: 10%;
+    width: 30%;
+    height: 100%;
+    background: linear-gradient(180deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.05) 30%,
+    transparent 60%
+    );
+    filter: blur(10px);
+    pointer-events: none;
+}
+
+/* Hologram Content */
+.hologram-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    height: 98%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.hologram-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter:
+            brightness(1.1)
+            contrast(1.05)
+            hue-rotate(-5deg);
+    mix-blend-mode: screen;
+    /* Remove white background */
+    background: transparent;
+}
+
+/* Hologram Effects */
+.hologram-scanlines {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+            0deg,
+            rgba(0, 255, 255, 0.03) 0px,
+            rgba(0, 255, 255, 0.03) 1px,
+            transparent 1px,
+            transparent 3px
+    );
+    pointer-events: none;
+    animation: scanlines 8s linear infinite;
+}
+
+@keyframes scanlines {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(4px); }
+}
+
+.hologram-flicker {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 255, 255, 0.02);
+    pointer-events: none;
+    animation: flicker 0.15s infinite alternate;
+}
+
+@keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.96; }
+}
+
+.hologram-glow {
+    position: absolute;
+    inset: -20%;
+    background: radial-gradient(
+            ellipse at center,
+            rgba(0, 255, 255, 0.15) 0%,
+            rgba(0, 200, 255, 0.08) 30%,
+            transparent 70%
+    );
+    filter: blur(20px);
+    pointer-events: none;
+    animation: glow-pulse 3s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.05); }
+}
+
+/* Cylinder bands */
+.cylinder-band {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 255, 255, 0.6) 50%,
+    transparent 100%
+    );
+    box-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+}
+
+.cylinder-band.top {
+    top: 0;
+}
+
+.cylinder-band.bottom {
+    bottom: 0;
+}
+
+/* Device Base */
+.device-base {
+    width: 200px;
+    height: 125px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 2;
+}
+
+.base-platform {
+    width: 100%;
+    height: 87px;
+    background: linear-gradient(180deg,
+    rgba(30, 45, 70, 0.95) 0%,
+    rgba(20, 30, 48, 1) 100%
+    );
+    border-radius: 0 0 100px 100px;
+    border: 2px solid rgba(0, 255, 255, 0.3);
+    border-top: none;
+    position: relative;
+    box-shadow:
+            inset 0 -2px 10px rgba(0, 255, 255, 0.2),
+            0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.base-ring {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    height: 30%;
+    border: 1px solid rgba(0, 200, 255, 0.4);
+    border-radius: 50%;
+}
+
+.base-glow {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 70%;
+    height: 8px;
+    background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 255, 255, 0.4) 50%,
+    transparent 100%
+    );
+    border-radius: 4px;
+    filter: blur(4px);
+    animation: base-pulse 2s ease-in-out infinite;
+}
+
+@keyframes base-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+.base-indicator {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    background: rgba(0, 255, 255, 0.8);
+    border-radius: 50%;
+    box-shadow:
+            0 0 10px rgba(0, 255, 255, 0.8),
+            0 0 20px rgba(0, 255, 255, 0.4);
+    animation: indicator-blink 1.5s ease-in-out infinite;
+}
+
+@keyframes indicator-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+.base-label {
+    margin-top: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: rgba(0, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: 0 0 5px rgba(0, 255, 255, 0.3);
+}
+
+/* Interaction Button */
+.hologram-interact-btn {
+    position: absolute;
+    bottom: -50px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg,
+    rgba(0, 200, 255, 0.2) 0%,
+    rgba(0, 150, 255, 0.3) 100%
+    );
+    border: 1.5px solid rgba(0, 255, 255, 0.5);
+    border-radius: 20px;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    box-shadow:
+            0 4px 15px rgba(0, 255, 255, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.hologram-interact-btn:hover:not(:disabled) {
+    transform: translateX(-50%) translateY(-2px);
+    background: linear-gradient(135deg,
+    rgba(0, 220, 255, 0.3) 0%,
+    rgba(0, 170, 255, 0.4) 100%
+    );
+    border-color: rgba(0, 255, 255, 0.8);
+    box-shadow:
+            0 6px 20px rgba(0, 255, 255, 0.3),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.hologram-interact-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-icon {
+    font-size: 18px;
+}
+
+.btn-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+}
+
+/* Ambient Lighting */
+.ambient-light {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 150px;
+    background: radial-gradient(
+            ellipse at center,
+            rgba(0, 255, 255, 0.15) 0%,
+            rgba(0, 200, 255, 0.08) 40%,
+            transparent 70%
+    );
+    filter: blur(30px);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Pulsing glow animation */
+@keyframes pulse-glow {
+    0%, 100% { opacity: 0.6; filter: blur(4px); }
+    50% { opacity: 1; filter: blur(6px); }
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .hologram-container.compact {
+        right: 20px;
+        transform: scale(0.7);
+    }
+
+    .hologram-container.expanded {
+        right: 25px;
+        transform: scale(0.9);
+    }
+}
+
+@media (max-width: 768px) {
+    .hologram-container.compact {
+        right: 10px;
+        bottom: calc(var(--player-height, 180px) + 10px);
+        transform: scale(0.55);
+    }
+
+    .hologram-container.expanded {
+        right: 15px;
+        bottom: calc(var(--player-height, 180px) + 10px);
+        transform: scale(0.7);
+    }
+
+    .hologram-interact-btn {
+        bottom: -40px;
+        padding: 8px 16px;
+    }
+
+    .btn-text {
+        font-size: 10px;
+    }
+}
+
+/* Entrance Animation */
+@keyframes hologram-enter {
+    from {
+        opacity: 0;
+        transform: translateY(50px) scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.hologram-device {
+    animation: hologram-enter 1s cubic-bezier(0.4, 0, 0.2, 1);
+}

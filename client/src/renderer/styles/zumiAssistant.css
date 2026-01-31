@@ -1,0 +1,277 @@
+/* client/src/renderer/styles/zumiAssistant.css */
+
+.zumi-assistant-container {
+    position: fixed;
+    top: 70px;
+    left: 20px;
+    z-index: 100;
+    background: linear-gradient(135deg,
+        rgba(26, 30, 46, 0.95) 0%,
+        rgba(30, 35, 55, 0.95) 100%
+    );
+    border: 2px solid rgba(255, 182, 193, 0.3);
+    border-radius: 16px;
+    padding: 16px;
+    width: 280px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 0 20px rgba(255, 182, 193, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: slideInFromLeft 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.zumi-assistant-container:hover {
+    border-color: rgba(255, 182, 193, 0.5);
+    box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.4),
+        0 0 30px rgba(255, 182, 193, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+@keyframes slideInFromLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-100px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Video Frame */
+.assistant-frame {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(135deg,
+        rgba(15, 20, 35, 0.8) 0%,
+        rgba(20, 25, 40, 0.8) 100%
+    );
+    margin-bottom: 12px;
+}
+
+.frame-border {
+    position: absolute;
+    inset: 0;
+    border: 1px solid rgba(255, 182, 193, 0.2);
+    border-radius: 12px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.assistant-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter: brightness(1.05) contrast(1.05);
+    mix-blend-mode: screen;
+}
+
+.frame-glow {
+    position: absolute;
+    inset: -10px;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(255, 182, 193, 0.15) 0%,
+        transparent 70%
+    );
+    filter: blur(15px);
+    pointer-events: none;
+    animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
+    }
+}
+
+/* Assistant Info */
+.assistant-info {
+    margin-bottom: 12px;
+    padding: 0 4px;
+}
+
+.assistant-name {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 182, 193, 1);
+    text-shadow: 0 0 10px rgba(255, 182, 193, 0.3);
+    letter-spacing: 0.5px;
+}
+
+.assistant-status {
+    margin: 0;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.assistant-status::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(0, 255, 150, 0.8);
+    box-shadow: 0 0 8px rgba(0, 255, 150, 0.6);
+    animation: status-pulse 2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Action Buttons */
+.assistant-actions {
+    display: flex;
+    gap: 8px;
+    flex-direction: column;
+}
+
+.assistant-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg,
+        rgba(255, 182, 193, 0.15) 0%,
+        rgba(255, 182, 193, 0.08) 100%
+    );
+    border: 1.5px solid rgba(255, 182, 193, 0.3);
+    border-radius: 10px;
+    color: white;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+    position: relative;
+    overflow: hidden;
+}
+
+.assistant-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.1) 50%,
+        transparent 100%
+    );
+    transition: left 0.5s ease;
+}
+
+.assistant-btn:hover::before {
+    left: 100%;
+}
+
+.assistant-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg,
+        rgba(255, 182, 193, 0.25) 0%,
+        rgba(255, 182, 193, 0.15) 100%
+    );
+    border-color: rgba(255, 182, 193, 0.5);
+    transform: translateY(-2px);
+    box-shadow:
+        0 4px 12px rgba(255, 182, 193, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.assistant-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.assistant-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(255, 182, 193, 0.05);
+}
+
+.btn-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.btn-label {
+    flex: 1;
+    text-align: left;
+    text-shadow: 0 0 5px rgba(255, 182, 193, 0.3);
+}
+
+.greet-btn:hover:not(:disabled) {
+    border-color: rgba(255, 200, 100, 0.5);
+}
+
+.random-btn:hover:not(:disabled) {
+    border-color: rgba(150, 200, 255, 0.5);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .zumi-assistant-container {
+        width: 240px;
+        padding: 12px;
+    }
+
+    .assistant-frame {
+        height: 160px;
+    }
+
+    .assistant-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .btn-icon {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .zumi-assistant-container {
+        top: 60px;
+        left: 10px;
+        width: 200px;
+        padding: 10px;
+    }
+
+    .assistant-frame {
+        height: 130px;
+    }
+
+    .assistant-name {
+        font-size: 14px;
+    }
+
+    .assistant-status {
+        font-size: 11px;
+    }
+
+    .assistant-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+
+    .btn-icon {
+        font-size: 14px;
+    }
+}
