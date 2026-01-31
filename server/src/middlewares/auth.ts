@@ -100,3 +100,69 @@ const auth = async (
 };
 
 export default auth;
+
+// Optional auth middleware for video streaming that accepts token from query params
+export const optionalAuth = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        // Try to get token from query param first (for video elements)
+        let token = req.query.token as string;
+
+        // If no query token, try Authorization header
+        if (!token) {
+            const authHeader = req.headers.authorization;
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+        }
+
+        if (!token) {
+            res.status(401).json({
+                error: 'No authorization token found',
+            });
+            return;
+        }
+
+        if (!process.env.JWT_SECRET) {
+            console.error('JWT_SECRET not configured in environment');
+            throw new Error('JWT_SECRET is not defined');
+        }
+
+        try {
+            const decoded = jwt.verify(
+                token,
+                process.env.JWT_SECRET,
+            ) as JwtPayload;
+
+            const user = await User.findById(decoded.userId);
+            if (!user) {
+                res.status(401).json({
+                    error: 'User not found',
+                });
+                return;
+            }
+
+            req.user = user;
+            next();
+        } catch (jwtError: unknown) {
+            if (!(jwtError instanceof Error)) {
+                console.error('JWT verification error:', jwtError);
+                res.status(401).json({
+                    error: 'Token verification failed',
+                });
+                return;
+            }
+            res.status(401).json({
+                error: `Token verification failed: ${jwtError.message}`,
+            });
+            return;
+        }
+    } catch (error) {
+        console.error('Optional auth middleware error:', error);
+        res.status(401).json({ error: 'Server authentication error' });
+    }
+};
+

@@ -7,6 +7,19 @@ class ApiClient {
         return API_URL;
     }
 
+    async getToken(): Promise<string> {
+        try {
+            const result = await ipcRenderer.invoke('auth:get-user-info');
+            if (!result.success || !result.token) {
+                throw new Error('Authentication required');
+            }
+            return result.token;
+        } catch (error) {
+            console.error('Failed to get token:', error);
+            throw error;
+        }
+    }
+
     private async getAuthHeaders(): Promise<Record<string, string>> {
         try {
             const result = await ipcRenderer.invoke('auth:get-user-info');

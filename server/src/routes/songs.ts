@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { songController } from '../controllers/songController.js';
-import auth from '../middlewares/auth.js';
+import auth, { optionalAuth } from '../middlewares/auth.js';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -73,6 +73,9 @@ const logUploadRequest = (req: Request, res: Response, next: NextFunction) => {
     next();
 };
 
+// Video streaming endpoint - uses optional auth to accept token from query params
+router.get('/:id/stream-video', optionalAuth, songController.streamVideo);
+
 // Routes
 router.use(auth);
 
@@ -85,7 +88,6 @@ router.get('/liked', songController.getLikedSongs);
 
 router.get('/:id', songController.getSong);
 router.get('/:id/stream', songController.streamSong);
-router.get('/:id/stream-video', songController.streamVideo); // NEW: Video streaming endpoint
 router.post('/:id/like', songController.toggleLike);
 router.patch('/:id/visibility', songController.updateVisibility);
 router.delete('/:id', songController.deleteSong);

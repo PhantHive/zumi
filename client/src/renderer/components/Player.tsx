@@ -219,10 +219,11 @@ const Player: React.FC<PlayerProps> = ({
                     if (currentSong.videoUrl && onVideoUrlChange) {
                         try {
                             const API_URL = await apiClient.getApiUrl();
-                            const videoUrl = `${API_URL}/api/songs/${currentSong.id}/stream-video`;
+                            const token = await apiClient.getToken();
+                            const videoUrl = `${API_URL}/api/songs/${currentSong.id}/stream-video?token=${encodeURIComponent(token)}`;
                             onVideoUrlChange(videoUrl);
                             setHasVideo(true);
-                            console.log('Video URL set:', videoUrl);
+                            console.log('Video URL set with token');
                         } catch (videoError) {
                             console.log('No video available for this song');
                             onVideoUrlChange('');
