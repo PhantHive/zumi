@@ -21,7 +21,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
-    const [isVideoReady, setIsVideoReady] = useState(false);
     const internalVideoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -32,7 +31,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     useEffect(() => {
         if (videoUrl) {
             setIsLoading(true);
-            setIsVideoReady(false);
         }
     }, [videoUrl]);
 
@@ -44,10 +42,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         const handleCanPlay = () => {
             console.log('Video ready to play');
             setIsLoading(false);
-            setIsVideoReady(true);
             if (onVideoReady) {
                 onVideoReady(video);
             }
+            // Auto-play the video when ready
+            video.play().catch(error => {
+                console.error('Auto-play failed:', error);
+            });
         };
 
         const handleLoadedData = () => {
@@ -64,19 +65,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         const handleError = (e: Event) => {
             console.error('Video error:', e);
             setIsLoading(false);
-            setIsVideoReady(false);
+        };
+
+        const handlePlaying = () => {
+            console.log('Video is playing');
         };
 
         video.addEventListener('loadeddata', handleLoadedData);
         video.addEventListener('canplay', handleCanPlay);
         video.addEventListener('loadstart', handleLoadStart);
         video.addEventListener('error', handleError);
+        video.addEventListener('playing', handlePlaying);
 
         return () => {
             video.removeEventListener('loadeddata', handleLoadedData);
             video.removeEventListener('canplay', handleCanPlay);
             video.removeEventListener('loadstart', handleLoadStart);
             video.removeEventListener('error', handleError);
+            video.removeEventListener('playing', handlePlaying);
         };
     }, [videoUrl, videoRef, onVideoReady]);
 
@@ -121,11 +127,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
                         ref={videoRef as React.RefObject<HTMLVideoElement>}
                         src={videoUrl}
                         loop
+                        autoPlay
                         muted={isMuted}
                         className="video-split-element"
                         playsInline
-                        preload="auto"
-                        crossOrigin="anonymous"
                     />
 
                     {isLoading && (

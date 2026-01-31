@@ -162,12 +162,14 @@ export class SongController {
             }
 
             const isDev = process.env.NODE_ENV === 'development';
-            const baseMusicPath = isDev ? './public/data' : '/app/data';
+            const baseMusicPath = isDev
+                ? path.resolve(process.cwd(), 'public', 'data')
+                : '/app/data';
             const baseThumbnailPath = isDev
-                ? './public/uploads/thumbnails'
+                ? path.resolve(process.cwd(), 'public', 'uploads', 'thumbnails')
                 : '/app/uploads/thumbnails';
             const baseVideoPath = isDev
-                ? './public/uploads/videos'
+                ? path.resolve(process.cwd(), 'public', 'uploads', 'videos')
                 : '/app/uploads/videos'; // NEW: Video base path
 
             // Ensure directories exist
@@ -278,9 +280,13 @@ export class SongController {
             const authenticatedReq = req as AuthenticatedRequest;
             const userEmail = authenticatedReq.user?.email;
             const songId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+            console.log(`[VIDEO STREAM] Request for song ID: ${songId}, user: ${userEmail}`);
+
             const song = await db.getSongById(parseInt(songId));
 
             if (!song) {
+                console.log(`[VIDEO STREAM] Song not found: ${songId}`);
                 res.status(404).json({ error: 'Song not found' });
                 return;
             }
@@ -290,6 +296,7 @@ export class SongController {
                 song.visibility === 'private' &&
                 song.uploadedBy !== userEmail
             ) {
+                console.log(`[VIDEO STREAM] Access denied for private song: ${songId}`);
                 res.status(403).json({
                     error: 'Access denied to private song',
                 });
@@ -297,18 +304,22 @@ export class SongController {
             }
 
             if (!song.videoUrl) {
+                console.log(`[VIDEO STREAM] No video URL for song: ${songId}`);
                 res.status(404).json({ error: 'No video available for this song' });
                 return;
             }
 
-            // Construct full video path
+            // Construct full video path with absolute path
             const isDev = process.env.NODE_ENV === 'development';
             const baseVideoPath = isDev
-                ? './public/uploads/videos'
+                ? path.resolve(process.cwd(), 'public', 'uploads', 'videos')
                 : '/app/uploads/videos';
             const videoPath = path.join(baseVideoPath, song.videoUrl);
 
+            console.log(`[VIDEO STREAM] Looking for video at: ${videoPath}`);
+
             if (!fs.existsSync(videoPath)) {
+                console.error(`[VIDEO STREAM] Video file not found: ${videoPath}`);
                 res.status(404).json({ error: 'Video file not found' });
                 return;
             }
@@ -318,12 +329,21 @@ export class SongController {
             const fileSize = stat.size;
             const range = req.headers.range;
 
+            console.log(`[VIDEO STREAM] File size: ${fileSize}, Range header: ${range || 'none'}`);
+
+            // Set CORS headers
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+
             if (range) {
                 // Parse range header
                 const parts = range.replace(/bytes=/, '').split('-');
                 const start = parseInt(parts[0], 10);
                 const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
                 const chunksize = end - start + 1;
+
+                console.log(`[VIDEO STREAM] Streaming range: ${start}-${end}/${fileSize}`);
 
                 // Create read stream for the requested range
                 const file = fs.createReadStream(videoPath, { start, end });
@@ -334,22 +354,47 @@ export class SongController {
                     'Accept-Ranges': 'bytes',
                     'Content-Length': chunksize,
                     'Content-Type': 'video/mp4',
+                    'Cache-Control': 'public, max-age=0',
+                });
+
+                // Handle stream errors
+                file.on('error', (error) => {
+                    console.error('[VIDEO STREAM] Stream error:', error);
+                    if (!res.headersSent) {
+                        res.status(500).end();
+                    }
                 });
 
                 file.pipe(res);
             } else {
+                console.log(`[VIDEO STREAM] Streaming entire file: ${fileSize} bytes`);
+
                 // Send entire file if no range requested
                 res.writeHead(200, {
                     'Content-Length': fileSize,
                     'Content-Type': 'video/mp4',
+                    'Accept-Ranges': 'bytes',
+                    'Cache-Control': 'public, max-age=0',
                 });
-                fs.createReadStream(videoPath).pipe(res);
+
+                const file = fs.createReadStream(videoPath);
+
+                file.on('error', (error) => {
+                    console.error('[VIDEO STREAM] Stream error:', error);
+                    if (!res.headersSent) {
+                        res.status(500).end();
+                    }
+                });
+
+                file.pipe(res);
             }
         } catch (error: unknown) {
             if (error instanceof Error) {
-                console.error('Error streaming video:', error);
+                console.error('[VIDEO STREAM] Error:', error);
             }
-            res.status(500).json({ error: 'Failed to stream video' });
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Failed to stream video' });
+            }
         }
     };
 

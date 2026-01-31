@@ -190,17 +190,10 @@ const App: React.FC = () => {
                 onNavigate={handleNavigate}
             />
             <div className="content-wrapper">
-                {/* Zumi Assistant - Fixed Upper Left */}
-                <ZumiAssistant
-                    isPlaying={isPlaying}
-                    albums={albums}
-                    setCurrentSong={setCurrentSong}
-                />
-
                 {/* Main Layout Area - Split Screen */}
                 <div className="main-layout-area">
                     {/* Albums Container - Left Side */}
-                    <div className={`albums-container ${videoUrl ? 'with-video' : ''}`}>
+                    <div className="albums-container">
                         {error && <div className="error-message">{error}</div>}
                         {albums.map((album) => (
                             <AlbumView
@@ -212,17 +205,23 @@ const App: React.FC = () => {
                         ))}
                     </div>
 
-                    {/* Video Panel - Right Side */}
-                    {videoUrl && (
-                        <div className="video-panel">
+                    {/* Right Panel - Zumi Assistant OR Video */}
+                    <div className="right-panel">
+                        {videoUrl ? (
                             <VideoPlayer
                                 videoUrl={videoUrl}
                                 songTitle={currentSong?.title}
                                 artistName={currentSong?.artist}
                                 videoRef={videoRef}
                             />
-                        </div>
-                    )}
+                        ) : (
+                            <ZumiAssistant
+                                isPlaying={isPlaying}
+                                albums={albums}
+                                setCurrentSong={setCurrentSong}
+                            />
+                        )}
+                    </div>
                 </div>
 
                 {/* Player - Bottom Fixed */}

@@ -66,25 +66,33 @@ body::before {
     flex: 1;
     overflow: hidden;
     width: 100%;
+    gap: 0;
 }
 
-/* Albums Container - Left Side with left margin for assistant */
+/* Albums Container - Left Side, always has right panel */
 .albums-container {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 20px;
-    padding-left: 320px; /* Space for assistant on the left */
-    padding-top: calc(var(--assistant-height) + 10px); /* Space at top for assistant */
     padding-bottom: calc(var(--player-height) + 20px);
     width: 100%;
-    transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 0;
 }
 
-/* When video is present - albums take left side */
-.albums-container.with-video {
-    max-width: calc(100% - var(--video-panel-width));
-    padding-right: 20px;
+/* Right Panel - Always visible (Zumi or Video) */
+.right-panel {
+    width: var(--video-panel-width);
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-left: 1px solid rgba(255, 182, 193, 0.2);
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+    padding-bottom: calc(var(--player-height) + 0px);
 }
 
 /* Custom Scrollbar */
@@ -118,27 +126,6 @@ body::before {
     background-clip: padding-box;
 }
 
-/* Video Panel - Right Side */
-.video-panel {
-    width: var(--video-panel-width);
-    flex-shrink: 0;
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border-left: 1px solid rgba(255, 182, 193, 0.2);
-    overflow: hidden;
-    position: relative;
-    animation: slideInRight 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes slideInRight {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
 
 /* Legacy Compatibility */
 .app-container {

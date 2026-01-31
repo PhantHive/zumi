@@ -136,6 +136,7 @@
     "lint-staged": "^15.2.11",
     "prettier": "^3.4.2",
     "style-loader": "^4.0.0",
+    "to-ico": "^1.1.5",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "tsm": "^1.0.1",

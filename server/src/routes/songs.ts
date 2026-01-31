@@ -151,6 +151,11 @@ router.get('/videos/:filename', (req, res) => {
     const fileSize = stat.size;
     const range = req.headers.range;
 
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+
     if (range) {
         // Handle range requests for video streaming
         const parts = range.replace(/bytes=/, "").split("-");
@@ -162,19 +167,40 @@ router.get('/videos/:filename', (req, res) => {
             'Content-Range': `bytes ${start}-${end}/${fileSize}`,
             'Accept-Ranges': 'bytes',
             'Content-Length': chunksize,
-            'Content-Type': 'video/mp4', // Adjust based on actual video format
+            'Content-Type': 'video/mp4',
+            'Cache-Control': 'public, max-age=0',
         };
 
         res.writeHead(206, head);
+
+        file.on('error', (error) => {
+            console.error('Video stream error:', error);
+            if (!res.headersSent) {
+                res.status(500).end();
+            }
+        });
+
         file.pipe(res);
     } else {
         // Send entire file
         const head = {
             'Content-Length': fileSize,
-            'Content-Type': 'video/mp4', // Adjust based on actual video format
+            'Content-Type': 'video/mp4',
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'public, max-age=0',
         };
         res.writeHead(200, head);
-        fs.createReadStream(filePath).pipe(res);
+
+        const file = fs.createReadStream(filePath);
+
+        file.on('error', (error) => {
+            console.error('Video stream error:', error);
+            if (!res.headersSent) {
+                res.status(500).end();
+            }
+        });
+
+        file.pipe(res);
     }
 });
 

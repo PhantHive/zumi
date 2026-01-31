@@ -3,6 +3,10 @@ import { API_URL } from '../../urlConfig';
 import { getAssetPath } from './assetPath';
 
 class ApiClient {
+    async getApiUrl(): Promise<string> {
+        return API_URL;
+    }
+
     private async getAuthHeaders(): Promise<Record<string, string>> {
         try {
             const result = await ipcRenderer.invoke('auth:get-user-info');

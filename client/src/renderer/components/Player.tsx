@@ -213,21 +213,24 @@ const Player: React.FC<PlayerProps> = ({
                         cleanupFunctions.push(thumbnailData.cleanup);
                     }
 
-                    // Load video if available
-                    if (currentSong.id && onVideoUrlChange) {
+                    // Load video if available - use direct URL for streaming
+                    if (currentSong.videoUrl && onVideoUrlChange) {
                         try {
-                            const videoData = await apiClient.getStream(
-                                `/api/songs/${currentSong.id}/stream-video`,
-                            );
-                            onVideoUrlChange(videoData.url);
+                            const API_URL = await apiClient.getApiUrl();
+                            const videoUrl = `${API_URL}/api/songs/${currentSong.id}/stream-video`;
+                            onVideoUrlChange(videoUrl);
                             setHasVideo(true);
-                            cleanupFunctions.push(videoData.cleanup);
-                            console.log('Video loaded successfully');
+                            console.log('Video URL set:', videoUrl);
                         } catch (videoError) {
                             console.log('No video available for this song');
                             onVideoUrlChange('');
                             setHasVideo(false);
                         }
+                    } else {
+                        if (onVideoUrlChange) {
+                            onVideoUrlChange('');
+                        }
+                        setHasVideo(false);
                     }
                 } catch (error) {
                     console.error('Error loading media:', error);
@@ -271,24 +274,45 @@ const Player: React.FC<PlayerProps> = ({
 
     useEffect(() => {
         const playNewSong = async () => {
-            if (currentSong && audioRef.current && !hasVideo) {
+            if (currentSong) {
                 try {
-                    await audioRef.current.pause();
-                    audioRef.current.currentTime = 0;
+                    // If we have video, the VideoPlayer component handles playback with autoPlay
+                    if (hasVideo && videoRefExternal.current) {
+                        console.log('Video playback - handled by VideoPlayer component');
+                        // Wait a bit for the video to start playing
+                        await new Promise((resolve) => setTimeout(resolve, 300));
+                        // Check if video is playing
+                        if (!videoRefExternal.current.paused) {
+                            setIsPlaying(true);
+                        } else {
+                            // Try to play if not already playing
+                            try {
+                                await videoRefExternal.current.play();
+                                setIsPlaying(true);
+                            } catch (playError) {
+                                console.error('Could not start video playback:', playError);
+                            }
+                        }
+                    }
+                    // Otherwise play audio
+                    else if (audioRef.current && !hasVideo) {
+                        await audioRef.current.pause();
+                        audioRef.current.currentTime = 0;
 
-                    const streamData = await apiClient.getStream(
-                        `/api/songs/${currentSong.id}/stream`,
-                    );
-                    setStreamUrl(streamData.url);
+                        const streamData = await apiClient.getStream(
+                            `/api/songs/${currentSong.id}/stream`,
+                        );
+                        setStreamUrl(streamData.url);
 
-                    audioRef.current.src = streamData.url;
+                        audioRef.current.src = streamData.url;
 
-                    await new Promise((resolve) => setTimeout(resolve, 100));
+                        await new Promise((resolve) => setTimeout(resolve, 100));
 
-                    const playPromise = audioRef.current.play();
-                    if (playPromise !== undefined) {
-                        await playPromise;
-                        setIsPlaying(true);
+                        const playPromise = audioRef.current.play();
+                        if (playPromise !== undefined) {
+                            await playPromise;
+                            setIsPlaying(true);
+                        }
                     }
                 } catch (error) {
                     console.error('Error starting playback:', error);
@@ -356,12 +380,27 @@ const Player: React.FC<PlayerProps> = ({
     useEffect(() => {
         if (hasVideo && videoRefExternal.current) {
             const video = videoRefExternal.current;
+
+            const handlePlay = () => {
+                console.log('Video started playing');
+                setIsPlaying(true);
+            };
+
+            const handlePause = () => {
+                console.log('Video paused');
+                setIsPlaying(false);
+            };
+
             video.addEventListener('timeupdate', handleTimeUpdate);
             video.addEventListener('ended', onNext);
+            video.addEventListener('play', handlePlay);
+            video.addEventListener('pause', handlePause);
 
             return () => {
                 video.removeEventListener('timeupdate', handleTimeUpdate);
                 video.removeEventListener('ended', onNext);
+                video.removeEventListener('play', handlePlay);
+                video.removeEventListener('pause', handlePause);
             };
         }
     }, [hasVideo, onNext]);
