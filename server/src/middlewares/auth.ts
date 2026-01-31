@@ -108,6 +108,9 @@ export const optionalAuth = async (
     next: NextFunction,
 ): Promise<void> => {
     try {
+        console.log('[OPTIONAL AUTH] Query params:', req.query);
+        console.log('[OPTIONAL AUTH] Authorization header:', req.headers.authorization);
+
         // Try to get token from query param first (for video elements)
         let token = req.query.token as string;
 
@@ -119,7 +122,11 @@ export const optionalAuth = async (
             }
         }
 
+        console.log('[OPTIONAL AUTH] Token found:', token ? 'YES' : 'NO');
+        console.log('[OPTIONAL AUTH] Token length:', token?.length || 0);
+
         if (!token) {
+            console.log('[OPTIONAL AUTH] No token found, rejecting request');
             res.status(401).json({
                 error: 'No authorization token found',
             });
@@ -132,29 +139,35 @@ export const optionalAuth = async (
         }
 
         try {
+            console.log('[OPTIONAL AUTH] Attempting to verify token...');
             const decoded = jwt.verify(
                 token,
                 process.env.JWT_SECRET,
             ) as JwtPayload;
 
+            console.log('[OPTIONAL AUTH] Token verified successfully. UserId:', decoded.userId);
+
             const user = await User.findById(decoded.userId);
             if (!user) {
+                console.log('[OPTIONAL AUTH] User not found for userId:', decoded.userId);
                 res.status(401).json({
                     error: 'User not found',
                 });
                 return;
             }
 
+            console.log('[OPTIONAL AUTH] User found:', user.email);
             req.user = user;
             next();
         } catch (jwtError: unknown) {
             if (!(jwtError instanceof Error)) {
-                console.error('JWT verification error:', jwtError);
+                console.error('[OPTIONAL AUTH] JWT verification error:', jwtError);
                 res.status(401).json({
                     error: 'Token verification failed',
                 });
                 return;
             }
+            console.error('[OPTIONAL AUTH] JWT verification failed:', jwtError.message);
             res.status(401).json({
                 error: `Token verification failed: ${jwtError.message}`,
             });
