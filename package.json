@@ -1,6 +1,6 @@
 {
   "name": "zumi",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Waifu Music Player",
   "main": "dist/client/src/main/main.js",
   "type": "module",
