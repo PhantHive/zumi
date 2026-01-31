@@ -73,31 +73,32 @@ const logUploadRequest = (req: Request, res: Response, next: NextFunction) => {
     next();
 };
 
+// Routes without global auth - apply auth individually
+
 // Video streaming endpoint - uses optional auth to accept token from query params
 router.get('/:id/stream-video', optionalAuth, songController.streamVideo);
 
-// Routes
-router.use(auth);
+// Regular routes with auth
+router.get('/', auth, songController.getAllSongs);
+router.get('/artists', auth, songController.getArtists);
+router.get('/albums', auth, songController.getAlbums);
+router.get('/genres', auth, songController.getGenres);
+router.get('/my-uploads', auth, songController.getMyUploads);
+router.get('/liked', auth, songController.getLikedSongs);
 
-router.get('/', songController.getAllSongs);
-router.get('/artists', songController.getArtists);
-router.get('/albums', songController.getAlbums);
-router.get('/genres', songController.getGenres);
-router.get('/my-uploads', songController.getMyUploads);
-router.get('/liked', songController.getLikedSongs);
-
-router.get('/:id', songController.getSong);
-router.get('/:id/stream', songController.streamSong);
-router.post('/:id/like', songController.toggleLike);
-router.patch('/:id/visibility', songController.updateVisibility);
-router.delete('/:id', songController.deleteSong);
+router.get('/:id', auth, songController.getSong);
+router.get('/:id/stream', auth, songController.streamSong);
+router.post('/:id/like', auth, songController.toggleLike);
+router.patch('/:id/visibility', auth, songController.updateVisibility);
+router.delete('/:id', auth, songController.deleteSong);
 
 // Simple administrative delete route: DELETE /api/songs/:id/row
 // Removes the song row by id regardless of uploader. Keep protected by auth middleware.
-router.delete('/:id/row', songController.deleteSongRow);
+router.delete('/:id/row', auth, songController.deleteSongRow);
 
 router.post(
     '/',
+    auth,
     logUploadRequest,
     upload.fields([
         { name: 'audio', maxCount: 1 },
@@ -110,6 +111,7 @@ router.post(
 // Add update route for song metadata and optional file replacements
 router.patch(
     '/:id',
+    auth,
     upload.fields([
         { name: 'audio', maxCount: 1 },
         { name: 'thumbnail', maxCount: 1 },
